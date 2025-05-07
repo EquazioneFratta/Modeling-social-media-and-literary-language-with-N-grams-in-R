@@ -71,7 +71,7 @@ def get_user_tweets(user_id, bearer_token, max_results=100, max_pages=10):
             break
             
         pages += 1
-        # Aggiungi un ritardo per rispettare i limiti di frequenza dell'API
+        # ritardo per rispettare i limiti di frequenza dell'API
         time.sleep(1)
     
     return all_tweets
@@ -122,15 +122,12 @@ def analyze_tweets_v2(bearer_token, usernames, max_results=100, max_pages=5):
     
     # Per ogni utente
     for username in usernames:
-        print(f"Analisi dei tweet di {username}...")
         
         # Ottieni l'ID utente
         user_id = get_user_id(username, bearer_token)
         if not user_id:
             print(f"Impossibile trovare l'ID utente per {username}. Passaggio al prossimo utente.")
             continue
-            
-        print(f"ID utente per {username}: {user_id}")
         
         # Estrai i tweet
         tweets = get_user_tweets(user_id, bearer_token, max_results, max_pages)
@@ -182,24 +179,24 @@ def analyze_tweets_v2(bearer_token, usernames, max_results=100, max_pages=5):
         df.to_csv(f"{username}_tweets.csv", index=False)
         
         # Crea e salva i grafici per bigrammi
-        plt.figure(figsize=(12, 8))
-        bg_labels = [' '.join(bg[0]) for bg in top_bigrams]
-        bg_values = [bg[1] for bg in top_bigrams]
-        plt.barh(bg_labels, bg_values)
-        plt.title(f"Top 20 bigrammi per {username}")
-        plt.xlabel("Frequenza")
-        plt.tight_layout()
-        plt.savefig(f"{username}_bigrams.png")
-        
-        # Crea e salva i grafici per trigrammi
-        plt.figure(figsize=(12, 8))
-        tg_labels = [' '.join(tg[0]) for tg in top_trigrams]
-        tg_values = [tg[1] for tg in top_trigrams]
-        plt.barh(tg_labels, tg_values)
-        plt.title(f"Top 20 trigrammi per {username}")
-        plt.xlabel("Frequenza")
-        plt.tight_layout()
-        plt.savefig(f"{username}_trigrams.png")
+        #plt.figure(figsize=(12, 8))
+        #bg_labels = [' '.join(bg[0]) for bg in top_bigrams]
+        #bg_values = [bg[1] for bg in top_bigrams]
+        #plt.barh(bg_labels, bg_values)
+        #plt.title(f"Top 20 bigrammi per {username}")
+        #plt.xlabel("Frequenza")
+        #plt.tight_layout()
+        #plt.savefig(f"{username}_bigrams.png")
+        #
+        ## Crea e salva i grafici per trigrammi
+        #plt.figure(figsize=(12, 8))
+        #tg_labels = [' '.join(tg[0]) for tg in top_trigrams]
+        #tg_values = [tg[1] for tg in top_trigrams]
+        #plt.barh(tg_labels, tg_values)
+        #plt.title(f"Top 20 trigrammi per {username}")
+        #plt.xlabel("Frequenza")
+        #plt.tight_layout()
+        #plt.savefig(f"{username}_trigrams.png")
     
     return results
 
