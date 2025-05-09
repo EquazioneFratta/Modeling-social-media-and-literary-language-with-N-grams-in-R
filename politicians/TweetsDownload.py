@@ -8,11 +8,9 @@ import time
 from datetime import datetime
 
 def setup_bearer_auth(bearer_token):
-    """Configura l'autenticazione Bearer per l'API v2"""
     return {"Authorization": f"Bearer {bearer_token}"}
 
 def get_user_id(username, bearer_token):
-    """Ottiene l'ID utente dal nome utente utilizzando l'API v2"""
     url = f"https://api.twitter.com/2/users/by/username/{username}"
     headers = setup_bearer_auth(bearer_token)
     
@@ -27,7 +25,6 @@ def get_user_id(username, bearer_token):
     return data.get('data', {}).get('id')
 
 def get_user_tweets(user_id, bearer_token, max_results=100, max_pages=10):
-    """Estrae tweet dall'utente specificato usando l'API v2"""
     url = f"https://api.twitter.com/2/users/{user_id}/tweets"
     headers = setup_bearer_auth(bearer_token)
     params = {
@@ -53,7 +50,6 @@ def get_user_tweets(user_id, bearer_token, max_results=100, max_pages=10):
             
         data = response.json()
         
-        # Estrai i tweet
         tweets = data.get('data', [])
         if not tweets:
             break
@@ -63,7 +59,6 @@ def get_user_tweets(user_id, bearer_token, max_results=100, max_pages=10):
             text = tweet.get('text')
             all_tweets.append((created_at, text))
         
-        # Verifica se ci sono altri tweet
         meta = data.get('meta', {})
         next_token = meta.get('next_token')
         
@@ -71,34 +66,23 @@ def get_user_tweets(user_id, bearer_token, max_results=100, max_pages=10):
             break
             
         pages += 1
-        # ritardo per rispettare i limiti di frequenza dell'API
         time.sleep(1)
     
     return all_tweets
 
 def clean_text(text):
-    """Pulisce il testo rimuovendo URL, menzioni, hashtag e caratteri speciali"""
-    # Rimuovi URL
     text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
-    # Rimuovi menzioni (@username)
     text = re.sub(r'@\w+', '', text)
-    # Rimuovi hashtag
     text = re.sub(r'#\w+', '', text)
-    # Rimuovi caratteri speciali e numeri
     text = re.sub(r'[^\w\s]', '', text)
     text = re.sub(r'\d+', '', text)
-    # Converti in minuscolo
     text = text.lower()
-    # Rimuovi spazi multipli
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 def generate_ngrams(text, n):
-    """Genera n-grammi dal testo dato"""
-    # Tokenizzazione semplice
     tokens = text.split()
     
-    # Lista base di stopwords italiane
     stop_words = {'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una',
                  'e', 'ed', 'ma', 'se', 'perché', 'che', 'di', 'a', 'da',
                  'in', 'con', 'su', 'per', 'tra', 'fra', 'è', 'sono', 'sei',
@@ -112,24 +96,19 @@ def generate_ngrams(text, n):
     
     tokens = [token for token in tokens if token not in stop_words and len(token) > 1]
     
-    # Genera n-grammi
     n_grams = list(ngrams(tokens, n))
     return n_grams
 
 def analyze_tweets_v2(bearer_token, usernames, max_results=100, max_pages=5):
-    """Estrae e analizza i tweet degli utenti specificati usando l'API v2"""
     results = {}
     
-    # Per ogni utente
     for username in usernames:
         
-        # Ottieni l'ID utente
         user_id = get_user_id(username, bearer_token)
         if not user_id:
             print(f"Impossibile trovare l'ID utente per {username}. Passaggio al prossimo utente.")
             continue
         
-        # Estrai i tweet
         tweets = get_user_tweets(user_id, bearer_token, max_results, max_pages)
         
         if not tweets:
@@ -138,35 +117,27 @@ def analyze_tweets_v2(bearer_token, usernames, max_results=100, max_pages=5):
             
         print(f"Estratti {len(tweets)} tweet per {username}")
         
-        # Prepara dataframe
         df = pd.DataFrame(tweets, columns=['created_at', 'text'])
         
-        # Pulisci i testi
         df['cleaned_text'] = df['text'].apply(clean_text)
         
-        # Concatena tutti i testi per l'analisi degli n-grammi
         all_text = ' '.join(df['cleaned_text'].tolist())
         
-        # Genera bigrammi e trigrammi
         bigrams = generate_ngrams(all_text, 2)
         trigrams = generate_ngrams(all_text, 3)
         
-        # Conta le frequenze
         bigram_freq = Counter(bigrams)
         trigram_freq = Counter(trigrams)
         
-        # Prendi i top 20
         top_bigrams = bigram_freq.most_common(20)
         top_trigrams = trigram_freq.most_common(20)
         
-        # Salva risultati
         results[username] = {
             'tweets': df,
             'bigrams': top_bigrams,
             'trigrams': top_trigrams
         }
         
-        # Visualizza i risultati
         print(f"\nTop 20 bigrammi per {username}:")
         for bg, count in top_bigrams:
             print(f"{' '.join(bg)}: {count}")
@@ -175,25 +146,18 @@ def analyze_tweets_v2(bearer_token, usernames, max_results=100, max_pages=5):
         for tg, count in top_trigrams:
             print(f"{' '.join(tg)}: {count}")
         
-        # Salva in CSV
         df.to_csv(f"{username}_tweets.csv", index=False)
         
         
     return results
 
-# Esempio di utilizzo
 if __name__ == "__main__":
-    # Inserisci qui il tuo bearer token dell'API v2
     bearer_token = "AAAAAAAAAAAAAAAAAAAAAJxk1AEAAAAApXbavtsUNRBehh1gMrMjKMg3Qx4%3DdFx4pQqLfwIXlPhqwFA9HptfYoBdjq76lkCSf1X749R3hN5PCY"
     
-    # Usernames da analizzare
     usernames = ["matteosalvinimi", "GiorgiaMeloni"]
-    #crea una condizione per evitare di richiamare analizza_tweets_v2 se son già stati creati per gli utenti
-    # Se i file CSV non esistono, esegui l'analisi
+
     for username in usernames:
         try:
             df = pd.read_csv(f"{username}_tweets.csv")
         except FileNotFoundError:
-            # Esegui l'analisi solo se il file non esiste
             results = analyze_tweets_v2(bearer_token, [username])
-    # Esegui l'analisi con API v2

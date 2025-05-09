@@ -2,7 +2,6 @@ library(tidyverse)
 library(tokenizers)
 library(ggplot2)
 
-# 1. Leggi e pulisci il testo
 read_and_clean_text <- function(file_path) {
   lines <- readLines(file_path, warn = FALSE)
   text <- paste(lines[lines != ""], collapse = " ")
@@ -10,12 +9,10 @@ read_and_clean_text <- function(file_path) {
   return(text)
 }
 
-# 2. Tokenizza mantenendo punteggiatura separata
 tokenize_text <- function(text) {
   tokenize_words(text, lowercase = TRUE, strip_punct = FALSE)[[1]]
 }
 
-# 3. Costruisci n-grammi manualmente
 build_ngrams <- function(tokens, n = 2) {
   ngram_list <- map_chr(seq_len(length(tokens) - n + 1), function(i) {
     paste(tokens[i:(i + n - 1)], collapse = " ")
@@ -24,7 +21,6 @@ build_ngrams <- function(tokens, n = 2) {
     count(ngram, sort = TRUE)
 }
 
-# 4. Plot
 plot_ngrams <- function(ngram_df, top_n = 15, title = "Top n-grams") {
   ngram_df %>%
     slice_max(n, n = top_n) %>%
@@ -35,7 +31,6 @@ plot_ngrams <- function(ngram_df, top_n = 15, title = "Top n-grams") {
     labs(x = NULL, y = "Frequenza", title = title)
 }
 
-# 5. Genera frase da n-grammi
 generate_sentence <- function(ngram_df, n = 2, max_words = 20) {
   ngram_split <- str_split(ngram_df$ngram, " ")
   if (n == 2) {
@@ -68,19 +63,15 @@ generate_sentence <- function(ngram_df, n = 2, max_words = 20) {
   return(sentence)
 }
 
-# ---- ESECUZIONE ----
 file_path <- "moby-dick.txt"
 text <- read_and_clean_text(file_path)
 tokens <- tokenize_text(text)
 
-# Bigrammi
 bigrams_df <- build_ngrams(tokens, n = 2)
 plot_ngrams(bigrams_df, title = "Top 15 Bigrammi")
 
-# Trigrammi
 trigrams_df <- build_ngrams(tokens, n = 3)
 plot_ngrams(trigrams_df, title = "Top 15 Trigrammi")
 
-# Genera frasi
 cat("Frase (bigrammi):", generate_sentence(bigrams_df, n = 2), "\n\n")
 cat("Frase (trigrammi):", generate_sentence(trigrams_df, n = 3), "\n")
