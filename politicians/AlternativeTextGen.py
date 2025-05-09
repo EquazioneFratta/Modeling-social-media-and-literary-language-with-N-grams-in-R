@@ -1,28 +1,14 @@
 import pandas as pd
-import re
-from nltk.util import ngrams
-from collections import defaultdict, Counter
 import random
 import math
 
-
-def clean_text(text):
-    text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
-    text = re.sub(r'@\w+', '', text)
-    text = re.sub(r'#\w+', '', text)
-    text = re.sub(r'\d+', '', text)
-    text = text.lower()
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
-
-
-def tokenize_with_punctuation(text):
-    pattern = r'[\w\']+|[.,!?;:()\[\]{}]'
-    return re.findall(pattern, text)
+from lib import clean_text, tokenize_with_punctuation, filter_tokens
+from nltk.util import ngrams
+from collections import defaultdict, Counter
 
 
 def load_and_tokenize_text(username):
-    df = pd.read_csv(f"{username}_tweets.csv")
+    df = pd.read_csv(f"../{username}_tweets.csv")
     all_tokens = []
     for _, row in df.iterrows():
         if 'text' in row and isinstance(row['text'], str):
@@ -31,22 +17,6 @@ def load_and_tokenize_text(username):
             if tokens:
                 all_tokens.extend(['<s>'] + tokens + ['</s>'])
     return all_tokens
-
-
-def filter_tokens(tokens):
-    stop_words = {'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una',
-                  'e', 'ed', 'ma', 'se', 'perché', 'che', 'di', 'a', 'da',
-                  'in', 'con', 'su', 'per', 'tra', 'fra', 'è', 'sono', 'sei',
-                  'del', 'della', 'dei', 'degli', 'delle', 'nel', 'nella',
-                  'nei', 'negli', 'nelle', 'sul', 'sulla', 'sui', 'sugli',
-                  'sulle', 'non', 'si', 'ci', 'mi', 'ti', 'vi', 'lo', 'la',
-                  'li', 'le', 'gli', 'ne', 'al', 'dal', 'del', 'più', 'che',
-                  'chi', 'cui', 'ha', 'ho', 'hai', 'hanno', 'come', 'dove',
-                  'quando', 'però', 'quindi', 'questo', 'questa', 'questi',
-                  'queste', 'quello', 'quella', 'quelli', 'quelle'}
-    punct = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}'}
-    return [t for t in tokens if t in punct or (t not in stop_words and len(t) > 1)]
-
 
 def compute_mle_probs(tokens):
     unigrams = Counter(tokens)
@@ -109,7 +79,6 @@ if __name__ == "__main__":
     mle_probs, unigrams, bigram_counts = compute_mle_probs(tokens)
     vocab_size = len(unigrams)
 
-    # Genera frasi
     print("\nEsempi di frasi generate con probabilità calcolate (MLE + smoothing):")
     for _ in range(5):
         print("-", generate_sentence(mle_probs, unigrams))

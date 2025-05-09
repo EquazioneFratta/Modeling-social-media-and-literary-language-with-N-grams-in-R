@@ -1,11 +1,10 @@
+import time
 import requests
 import pandas as pd
-import re
-import matplotlib.pyplot as plt
+
+from lib import clean_text
 from nltk.util import ngrams
 from collections import Counter
-import time
-from datetime import datetime
 
 def setup_bearer_auth(bearer_token):
     return {"Authorization": f"Bearer {bearer_token}"}
@@ -69,16 +68,6 @@ def get_user_tweets(user_id, bearer_token, max_results=100, max_pages=10):
         time.sleep(1)
     
     return all_tweets
-
-def clean_text(text):
-    text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
-    text = re.sub(r'@\w+', '', text)
-    text = re.sub(r'#\w+', '', text)
-    text = re.sub(r'[^\w\s]', '', text)
-    text = re.sub(r'\d+', '', text)
-    text = text.lower()
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
 
 def generate_ngrams(text, n):
     tokens = text.split()

@@ -2,3 +2,4 @@
 .Rhistory
 .RData
 .Ruserdata
+politicians/__pycache__/*.pyc
