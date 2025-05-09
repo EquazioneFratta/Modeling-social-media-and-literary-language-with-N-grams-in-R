@@ -178,37 +178,22 @@ def analyze_tweets_v2(bearer_token, usernames, max_results=100, max_pages=5):
         # Salva in CSV
         df.to_csv(f"{username}_tweets.csv", index=False)
         
-        # Crea e salva i grafici per bigrammi
-        #plt.figure(figsize=(12, 8))
-        #bg_labels = [' '.join(bg[0]) for bg in top_bigrams]
-        #bg_values = [bg[1] for bg in top_bigrams]
-        #plt.barh(bg_labels, bg_values)
-        #plt.title(f"Top 20 bigrammi per {username}")
-        #plt.xlabel("Frequenza")
-        #plt.tight_layout()
-        #plt.savefig(f"{username}_bigrams.png")
-        #
-        ## Crea e salva i grafici per trigrammi
-        #plt.figure(figsize=(12, 8))
-        #tg_labels = [' '.join(tg[0]) for tg in top_trigrams]
-        #tg_values = [tg[1] for tg in top_trigrams]
-        #plt.barh(tg_labels, tg_values)
-        #plt.title(f"Top 20 trigrammi per {username}")
-        #plt.xlabel("Frequenza")
-        #plt.tight_layout()
-        #plt.savefig(f"{username}_trigrams.png")
-    
+        
     return results
 
 # Esempio di utilizzo
 if __name__ == "__main__":
     # Inserisci qui il tuo bearer token dell'API v2
-    bearer_token = "AAAAAAAAAAAAAAAAAAAAABI%2B1AEAAAAAgyoRcjP0XkSh2%2F4wlPFIKiOZOi4%3DKtj4HFtQBVkZYUAaEQ2Wyzjt7vYAJ45S9FCwYkSdmb8exieWie"
+    bearer_token = "AAAAAAAAAAAAAAAAAAAAAJxk1AEAAAAApXbavtsUNRBehh1gMrMjKMg3Qx4%3DdFx4pQqLfwIXlPhqwFA9HptfYoBdjq76lkCSf1X749R3hN5PCY"
     
     # Usernames da analizzare
     usernames = ["matteosalvinimi", "GiorgiaMeloni"]
-    
+    #crea una condizione per evitare di richiamare analizza_tweets_v2 se son già stati creati per gli utenti
+    # Se i file CSV non esistono, esegui l'analisi
+    for username in usernames:
+        try:
+            df = pd.read_csv(f"{username}_tweets.csv")
+        except FileNotFoundError:
+            # Esegui l'analisi solo se il file non esiste
+            results = analyze_tweets_v2(bearer_token, [username])
     # Esegui l'analisi con API v2
-    results = analyze_tweets_v2(bearer_token, usernames)
-    
-    print("\nAnalisi completata! I risultati sono stati salvati in file CSV e immagini PNG.")
