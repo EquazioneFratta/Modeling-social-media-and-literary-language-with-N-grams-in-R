@@ -6,30 +6,23 @@ import re
 import os
 
 def clean_text(text):
-    """Pulisce il testo rimuovendo URL, menzioni e hashtag"""
-    # Rimuovi URL, menzioni e hashtag
     text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
     text = re.sub(r'@\w+', '', text)
     text = re.sub(r'#\w+', '', text)
-    # Rimuovi numeri
     text = re.sub(r'\d+', '', text)
-    # Converti in minuscolo
+
     text = text.lower()
-    # Normalizza spazi bianchi prima di tokenizzare
+
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
 def tokenize_with_punctuation(text):
-    """Tokenizza il testo mantenendo la punteggiatura come token separati"""
-    # Separa la punteggiatura dalle parole
     tokens = []
-    # Utilizziamo una regex per separare parole e punteggiatura
     pattern = r'[\w\']+|[.,!?;:()\[\]{}]'
     tokens = re.findall(pattern, text)
     return tokens
 
 def generate_ngrams(tokens, n):
-    """Genera n-grammi dai token, rimuovendo stopword italiane ma mantenendo punteggiatura"""
     stop_words = {'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una',
                  'e', 'ed', 'ma', 'se', 'perché', 'che', 'di', 'a', 'da',
                  'in', 'con', 'su', 'per', 'tra', 'fra', 'è', 'sono', 'sei',
@@ -43,7 +36,6 @@ def generate_ngrams(tokens, n):
     
     punctuation = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}'}
     
-    # Filtra i token conservando la punteggiatura e rimuovendo le stopwords
     filtered_tokens = []
     for token in tokens:
         if token in punctuation:
@@ -51,11 +43,9 @@ def generate_ngrams(tokens, n):
         elif token not in stop_words and len(token) > 1:
             filtered_tokens.append(token)
     
-    # Genera gli n-grammi
     return list(ngrams(filtered_tokens, n))
 
 def plot_ngrams(ngram_freq, title, n, username):
-    """Crea un grafico a barre per i top n-grammi"""
     items = ngram_freq.most_common(20)
     phrases = [' '.join(gram) for gram, _ in items]
     counts = [count for _, count in items]
@@ -69,7 +59,6 @@ def plot_ngrams(ngram_freq, title, n, username):
     plt.show()
 
 def analyze_ngrams_from_csv(username):
-    """Legge il CSV dell'utente e genera grafici di bigrammi e trigrammi"""
     filename = f"{username}_tweets.csv"
     if not os.path.exists(filename):
         print(f"File {filename} non trovato. Salto {username}.")
@@ -77,7 +66,6 @@ def analyze_ngrams_from_csv(username):
 
     df = pd.read_csv(filename)
     
-    # Pulisci il testo e poi tokenizza con punteggiatura
     all_tokens = []
     for _, row in df.iterrows():
         if 'text' in row and isinstance(row['text'], str):
@@ -85,7 +73,6 @@ def analyze_ngrams_from_csv(username):
             tokens = tokenize_with_punctuation(cleaned_text)
             all_tokens.extend(tokens)
     
-    # Genera bigrammi e trigrammi dai token
     bigrams = generate_ngrams(all_tokens, 2)
     trigrams = generate_ngrams(all_tokens, 3)
 
@@ -95,7 +82,6 @@ def analyze_ngrams_from_csv(username):
     plot_ngrams(bigram_freq, "Top 20 Bigrammi", 2, username)
     plot_ngrams(trigram_freq, "Top 20 Trigrammi", 3, username)
 
-# Esecuzione per ogni utente
 if __name__ == "__main__":
     usernames = ["matteosalvinimi", "GiorgiaMeloni"]
     for username in usernames:
