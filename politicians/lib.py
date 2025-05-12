@@ -22,16 +22,16 @@ def tokenize_with_punctuation(text):
 
 
 def filter_tokens(tokens):
-    stop_words = {'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una',
-                 'e', 'ed', 'ma', 'se', 'perché', 'che', 'di', 'a', 'da',
-                 'in', 'con', 'su', 'per', 'tra', 'fra', 'è', 'sono', 'sei',
-                 'del', 'della', 'dei', 'degli', 'delle', 'nel', 'nella',
-                 'nei', 'negli', 'nelle', 'sul', 'sulla', 'sui', 'sugli',
-                 'sulle', 'non', 'si', 'ci', 'mi', 'ti', 'vi', 'lo', 'la',
-                 'li', 'le', 'gli', 'ne', 'al', 'dal', 'del', 'più', 'che',
-                 'chi', 'cui', 'ha', 'ho', 'hai', 'hanno', 'come', 'dove',
-                 'quando', 'però', 'quindi', 'questo', 'questa', 'questi',
-                 'queste', 'quello', 'quella', 'quelli', 'quelle'}
+    #stop_words = {'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una',
+    #             'e', 'ed', 'ma', 'se', 'perché', 'che', 'di', 'a', 'da',
+    #             'in', 'con', 'su', 'per', 'tra', 'fra', 'è', 'sono', 'sei',
+    #             'del', 'della', 'dei', 'degli', 'delle', 'nel', 'nella',
+    #             'nei', 'negli', 'nelle', 'sul', 'sulla', 'sui', 'sugli',
+    #             'sulle', 'non', 'si', 'ci', 'mi', 'ti', 'vi', 'lo', 'la',
+    #             'li', 'le', 'gli', 'ne', 'al', 'dal', 'del', 'più', 'che',
+    #             'chi', 'cui', 'ha', 'ho', 'hai', 'hanno', 'come', 'dove',
+    #             'quando', 'però', 'quindi', 'questo', 'questa', 'questi',
+    #             'queste', 'quello', 'quella', 'quelli', 'quelle'}
     
     punctuation = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}'}
     
@@ -39,7 +39,7 @@ def filter_tokens(tokens):
     for token in tokens:
         if token in punctuation:
             filtered_tokens.append(token)
-        elif token not in stop_words and len(token) > 1:
+        elif len(token) > 1:
             filtered_tokens.append(token)
     
     return filtered_tokens
