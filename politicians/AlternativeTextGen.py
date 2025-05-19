@@ -332,9 +332,7 @@ def post_process_text(tokens):
     # Correggi eventuali spazi duplicati
     text = re.sub(r'\s+', ' ', text)
     
-    # Assicurati che abbiamo una maiuscola all'inizio e un punto alla fine
-    if text and not text[-1] in [".", "!", "?"]:
-        text += "."
+    # Inserisce maiuscola
     
     if text and text[0].isalpha():
         text = text[0].upper() + text[1:]
@@ -368,11 +366,28 @@ if __name__ == "__main__":
         print("-", generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words))
 
     # Calcola perplexity di una frase esistente
-    test_sentence = "Questa è una frase di test".split()
+    test_sentence_raw = "Questa è una frase di test"
+    test_sentence = test_sentence_raw.split()
     test_sentence = filter_tokens(test_sentence)
+    
+    print(f"\nFrase di test utilizzata: '{test_sentence_raw}'")
+    print(f"Token dopo filtro: {test_sentence}")
 
     perplexity_bigram = calculate_perplexity(test_sentence, bigram_probs, unigrams)
-    print(f"\nPerplexity della frase di test (Bigram): {perplexity_bigram:.2f}")
+    print(f"Perplexity della frase di test (Bigram): {perplexity_bigram:.2f}")
 
     perplexity_trigram = calculate_perplexity_trigram(test_sentence, bigram_probs, trigram_probs, unigrams)
-    print(f"\nPerplexity della frase di test (Trigram): {perplexity_trigram:.2f}")
+    print(f"Perplexity della frase di test (Trigram): {perplexity_trigram:.2f}")
+    
+    # Calcola anche perplexity su un esempio reale dal dataset
+    if len(tokens) > 20:
+        real_example = tokens[10:20]  # Prendiamo un esempio reale dai dati
+        real_text = post_process_text(real_example)
+        print(f"\nEsempio reale dal dataset: '{real_text}'")
+        
+        perplexity_real_bigram = calculate_perplexity(real_example, bigram_probs, unigrams)
+        print(f"Perplexity dell'esempio reale (Bigram): {perplexity_real_bigram:.2f}")
+        
+        if len(real_example) >= 3:
+            perplexity_real_trigram = calculate_perplexity_trigram(real_example, bigram_probs, trigram_probs, unigrams)
+            print(f"Perplexity dell'esempio reale (Trigram): {perplexity_real_trigram:.2f}")
