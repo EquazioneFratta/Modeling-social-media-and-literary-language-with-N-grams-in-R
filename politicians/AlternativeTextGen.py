@@ -19,9 +19,7 @@ def load_and_tokenize_text(username):
             # Pulisci il testo mantenendo la punteggiatura originale
             cleaned = clean_text(text)
             
-            # Se il testo pulito è vuoto o troppo corto, salta
-            if not cleaned or len(cleaned.strip()) < 3:
-                continue
+            
                 
             tokens = tokenize_with_nltk(cleaned)
             
@@ -30,7 +28,9 @@ def load_and_tokenize_text(username):
                 filtered_tokens = filter_tokens(tokens)
                 if filtered_tokens:
                     all_tokens.extend(['<s>'] + filtered_tokens + ['</s>'])
-    
+            #stampa tutti i token per debug
+            print(f"Tokenizzati: {filtered_tokens}")
+
     return all_tokens
 
 

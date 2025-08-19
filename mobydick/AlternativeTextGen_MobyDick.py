@@ -2,7 +2,9 @@ import re
 import random
 import math
 from collections import Counter
+from pathlib import Path
 from nltk.util import ngrams
+import matplotlib.pyplot as plt
 
 from lib import clean_text, tokenize_english, filter_tokens
 
@@ -13,7 +15,7 @@ def load_and_tokenize_mobydick(filepath):
         raw_text = f.read()
     
     cleaned = clean_text(raw_text)
-    tokens = tokens = tokenize_english(cleaned)
+    tokens = tokenize_english(cleaned)
     filtered_tokens = filter_tokens(tokens)
 
     # Inserisce <s> e </s> ai segmenti separati da punti o simili
@@ -37,7 +39,7 @@ def analyze_start_end_words(tokens):
     """
     start_words = Counter()
     end_words = Counter()
-    punctuation = ['.', ',', '!', '?', ':', ';', '...']
+    punctuation = ['.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"]
     
     for i in range(len(tokens) - 1):
         if tokens[i] == '<s>' and i + 1 < len(tokens):
@@ -63,7 +65,7 @@ def compute_mle_probs_with_improved_smoothing(tokens, smoothing_factor=0.1):
     trigram_counts = Counter(trigrams)
 
     # Rimuovi combinazioni di punteggiatura non valide
-    punctuation = ['.', ',', '!', '?', ':', ';', '...']
+    punctuation = ['.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"]
     filtered_bigram_counts = Counter()
     filtered_trigram_counts = Counter()
     
@@ -73,9 +75,9 @@ def compute_mle_probs_with_improved_smoothing(tokens, smoothing_factor=0.1):
             filtered_bigram_counts[(w1, w2)] = count
     
     for (w1, w2, w3), count in trigram_counts.items():
-        # Evita sequenze di punteggiatura consecutiva
-        if not ((w1 in punctuation and w2 in punctuation) or 
-                (w2 in punctuation and w3 in punctuation)):
+        # Evita sequenze di punteggiatura consecutiva (consenti al massimo un segno di punteggiatura)
+        punctuation_count = int(w1 in punctuation) + int(w2 in punctuation) + int(w3 in punctuation)
+        if punctuation_count < 2:
             filtered_trigram_counts[(w1, w2, w3)] = count
 
     bigram_probs = {}
@@ -92,7 +94,8 @@ def compute_mle_probs_with_improved_smoothing(tokens, smoothing_factor=0.1):
     for (w1, w2, w3), count in filtered_trigram_counts.items():
         bigram = (w1, w2)
         bigram_count = filtered_bigram_counts[bigram] if bigram in filtered_bigram_counts else 0
-        trigram_probs[(w1, w2, w3)] = (count + smoothing_factor) / (bigram_count + smoothing_factor * V)
+        if bigram_count > 0:
+            trigram_probs[(w1, w2, w3)] = (count + smoothing_factor) / (bigram_count + smoothing_factor * V)
 
     return bigram_probs, trigram_probs, unigrams, filtered_bigram_counts, filtered_trigram_counts
 
@@ -104,7 +107,11 @@ def select_next_word_weighted(candidates, weights):
     """
     if not candidates:
         return None
-    return random.choices(candidates, weights=weights, k=1)[0]
+    total_weight = sum(weights)
+    if total_weight <= 0:
+        return random.choice(candidates)
+    normalized = [w / total_weight for w in weights]
+    return random.choices(candidates, weights=normalized, k=1)[0]
 
 
 def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_length=30):
@@ -121,7 +128,7 @@ def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_l
     
     sentence = [first_word]
     current_word = first_word
-    punctuation = ['.', ',', '!', '?', ':', ';', '...']
+    punctuation = ['.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"]
     
     for _ in range(max_length):
         # Trova tutte le possibili parole successive
@@ -150,7 +157,8 @@ def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_l
             next_word = select_next_word_weighted(next_words, next_weights)
         
         sentence.append(next_word)
-        if next_word == '</s>':
+        # Termina se raggiungiamo un punto fermo o end-of-sentence
+        if next_word == '</s>' or (next_word == '.' and random.random() > 0.3):
             break
         current_word = next_word
     
@@ -160,7 +168,9 @@ def calculate_perplexity(test_tokens, bigram_probs, unigrams, smoothing_factor=0
     """
     Calcola perplexity con smoothing migliorato e gestione di OOV.
     """
-    N = len(test_tokens)
+    if len(test_tokens) < 2:
+        return float('inf')
+    N = len(test_tokens) - 1
     sum_log_prob = 0.0
     V = len(unigrams)
     
@@ -190,7 +200,9 @@ def calculate_perplexity_trigram(test_tokens, bigram_probs, trigram_probs, unigr
     """
     Calcola perplexity per il modello trigram con smoothing e gestione OOV migliorati.
     """
-    N = len(test_tokens)
+    if len(test_tokens) < 3:
+        return float('inf')
+    N = len(test_tokens) - 2
     sum_log_prob = 0.0
     V = len(unigrams)
     
@@ -227,7 +239,7 @@ def post_process_text(tokens):
         return ""
     
     text = ""
-    punctuation = ['.', ',', '!', '?', ':', ';', '...']
+    punctuation = ['.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"]
     
     for i, token in enumerate(tokens):
         # Gestione della punteggiatura - evita spazi prima
@@ -337,7 +349,7 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
                 if w1 == current_bigram[1]:
                     if not (current_bigram[1] in punctuation and w2 in punctuation):
                         next_words.append(w2)
-                        next_weights.append(prob)
+                        next_weights.append(prob * 0.7)  # Penalizza leggermente il backoff
         
         if not next_words:
             break
@@ -346,7 +358,7 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
         if len(sentence) > max_length * 0.7:
             end_candidates = [w for w in next_words if w in end_words]
             if end_candidates and random.random() > 0.3:  # 70% di probabilità di usare una parola di fine
-                end_weights = [end_words[w] for w in end_candidates]
+                end_weights = [end_words[w] * next_weights[next_words.index(w)] for w in end_candidates]
                 next_word = select_next_word_weighted(end_candidates, end_weights)
             else:
                 next_word = select_next_word_weighted(next_words, next_weights)
@@ -354,7 +366,7 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
             next_word = select_next_word_weighted(next_words, next_weights)
         
         sentence.append(next_word)
-        if next_word == '</s>':
+        if next_word == '</s>' or (next_word == '.' and random.random() > 0.3):
             break
         
         # Aggiorna il bigram corrente
@@ -362,8 +374,44 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
     
     return post_process_text(sentence)
 
+def plot_top_ngrams(tokens, n=2, top_k=20, include_special=False, include_punct=False, title=None, save_path=None):
+    """
+    Crea un grafico orizzontale dei top-k n-grammi.
+    Per default esclude <s>, </s> e la punteggiatura.
+    """
+    punct = {'.', ',', '!', '?', ';', ':', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
+
+    toks = tokens if include_special else [t for t in tokens if t not in {'<s>', '</s>'}]
+    if not include_punct:
+        toks = [t for t in toks if t not in punct]
+
+    counts = Counter(ngrams(toks, n))
+    most_common = counts.most_common(top_k)
+    if not most_common:
+        print("Nessun n-gram disponibile per il grafico.")
+        return
+
+    labels = [' '.join(ng) for ng, _ in most_common]
+    values = [c for _, c in most_common]
+
+    plt.figure(figsize=(10, max(4, 0.4 * len(labels))))
+    plt.barh(range(len(labels)), values, color='#4C78A8')
+    plt.yticks(range(len(labels)), labels)
+    plt.gca().invert_yaxis()
+    plt.xlabel('Frequenza')
+    plt.title(title or f'Top {top_k} {"bi" if n==2 else "tri"}grammi')
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=150)
+        print(f"Grafico salvato in: {save_path}")
+        plt.close()
+    else:
+        plt.show()
+
 if __name__ == "__main__":
-    filepath = "moby-dick.txt"  # usare moby-dick-clean.txt per un file senza introduzione
+    # Percorso relativo per portabilità
+    filepath = str((Path(__file__).resolve().parent / 'moby-dick-clean.txt'))
     tokens = load_and_tokenize_mobydick(filepath)
 
     start_words, end_words = analyze_start_end_words(tokens)
@@ -376,8 +424,33 @@ if __name__ == "__main__":
     print(f"Bigrammi unici: {len(bigram_counts)}")
     print(f"Trigrammi unici: {len(trigram_counts)}")
 
-    print("\nEsempi di frasi lunghe generate con Trigrammi migliorati:")
+    # Grafici top n-grammi (salvati nella root del progetto)
+    project_root = Path(__file__).resolve().parents[1]
+    plot_top_ngrams(
+        tokens,
+        n=2,
+        top_k=20,
+        title='Moby Dick - Top 20 bigrammi',
+        save_path=str(project_root / 'MobyDick_top_20_bigrammi.png')
+    )
+    plot_top_ngrams(
+        tokens,
+        n=3,
+        top_k=20,
+        title='Moby Dick - Top 20 trigrammi',
+        save_path=str(project_root / 'MobyDick_top_20_trigrammi.png')
+    )
+
+    print("\nEsempi di frasi generate con Bigrammi:")
     for _ in range(3):
+        print("-", generate_sentence_with_start_end(bigram_probs, start_words, end_words))
+
+    print("\nEsempi di frasi generate con Trigrammi:")
+    for _ in range(3):
+        print("-", generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words))
+
+    print("\nEsempi di frasi lunghe generate con Trigrammi (troncate):")
+    for _ in range(2):
         print("\n---\n", generate_long_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words))
 
 

@@ -1,53 +1,62 @@
 import re
+import nltk
 
 def clean_text(text):
-    #rimuove URL, menzioni, hashtag e numeri
-    text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
-    text = re.sub(r'@\w+', '', text)
-    text = re.sub(r'#\w+', '', text)
-    text = re.sub(r'\d+', '', text)
-
-    text = text.lower()
     
-    #rimuove spazi 
-    text = re.sub(r'\s+', ' ', text).strip()
+    if not text or not isinstance(text, str):
+        return ""
+
+
+    # Normalize whitespace and lowercase
+    text = re.sub(r'\s+', ' ', text).strip().lower()
     return text
 
 
 def tokenize_with_punctuation(text):
-    #separa parole e punteggiatura
-    pattern = r'[\w\']+|[.,!?;:()\[\]{}]'
-    tokens = re.findall(pattern, text)
-    return tokens
+  
+    pattern = r"\w+(?:'\w+)?|[.,!?;:()\[\]{}]"
+    return re.findall(pattern, text)
 
 
 def filter_tokens(tokens):
-    #stop_words = {'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una',
-    #             'e', 'ed', 'ma', 'se', 'perché', 'che', 'di', 'a', 'da',
-    #             'in', 'con', 'su', 'per', 'tra', 'fra', 'è', 'sono', 'sei',
-    #             'del', 'della', 'dei', 'degli', 'delle', 'nel', 'nella',
-    #             'nei', 'negli', 'nelle', 'sul', 'sulla', 'sui', 'sugli',
-    #             'sulle', 'non', 'si', 'ci', 'mi', 'ti', 'vi', 'lo', 'la',
-    #             'li', 'le', 'gli', 'ne', 'al', 'dal', 'del', 'più', 'che',
-    #             'chi', 'cui', 'ha', 'ho', 'hai', 'hanno', 'come', 'dove',
-    #             'quando', 'però', 'quindi', 'questo', 'questa', 'questi',
-    #             'queste', 'quello', 'quella', 'quelli', 'quelle'}
     
-    punctuation = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}'}
-    
+    if not tokens:
+        return []
+
+    important_punctuation = {'.', ',', '!', '?', ';', ':', '(', ')', '[', ']', '{', '}', '"', "'"}
+    allowed_short_words = {
+        'a', 'an', 'the', 'i', 'you', 'he', 'she', 'it', 'we', 'they',
+        'me', 'us', 'him', 'her', 'them', 'my', 'your', 'his', 'her', 'its', 'our', 'their',
+        'am', 'is', 'are', 'be', 'was', 'were', 'to', 'of', 'in', 'on', 'at', 'by', 'as', 'or', 'and', 'but', 'not',
+        'do', 'did', 'does', 'so', 'if', 'no', 'yes', 'up', 'out', 'for', 'from', 'with', 'this', 'that'
+    }
+
     filtered_tokens = []
     for token in tokens:
-        if token in punctuation:
+        if not token or not token.strip():
+            continue
+        token = token.strip().lower()
+
+        if token in important_punctuation:
             filtered_tokens.append(token)
-        elif len(token) > 1:
+        elif len(token) > 1 or token in allowed_short_words:
+            # English letters, apostrophes, and hyphens
+            if re.match(r"^[a-zA-Z][a-zA-Z\-'’]*$", token) or token in allowed_short_words:
+                filtered_tokens.append(token)
+        elif token.isdigit() and len(token) >= 2:
             filtered_tokens.append(token)
-    
+
     return filtered_tokens
 
 def tokenize_english(text):
-    """
-    Tokenizza testo inglese mantenendo le contrazioni come hasn't, I'm, they'll.
-    Separa punteggiatura ma non spezza le parole con apostrofo.
-    """
-    pattern = r"\w+(?:'\w+)?|[.,!?;:()\[\]{}]"
-    return re.findall(pattern, text)
+   
+    if not text:
+        return []
+    try:
+        sentences = nltk.sent_tokenize(text, language='english')
+        tokens = []
+        for sentence in sentences:
+            tokens.extend(nltk.word_tokenize(sentence, language='english'))
+        return tokens
+    except Exception:
+        return tokenize_with_punctuation(text)

@@ -159,5 +159,7 @@ def filter_tokens(tokens):
         # Mantieni anche numeri se significativi
         elif token.isdigit() and len(token) >= 2:
             filtered_tokens.append(token)
-    
+        #stampa i token che non sono stati filtrati
+        else:
+            print(f"Token filtrato: {token}")
     return filtered_tokens
