@@ -4,44 +4,65 @@ import math
 import re
 from collections import defaultdict, Counter
 from nltk.util import ngrams
+from pathlib import Path
+import matplotlib.pyplot as plt
 
 from lib import clean_text, tokenize_with_nltk, filter_tokens
 
 
-def load_and_tokenize_text(username):
-    df = pd.read_csv(f"{username}_tweets.csv")
-    all_tokens = []
+# Parole funzione da evitare come parola finale delle frasi
+BAD_END_TOKENS = {
+    'il','lo','la','i','gli','le','un','uno','una','di','a','da','in','con','su','per','tra','fra',
+    'e','o','che','se','ma','non','mi','ti','si','ci','vi','ne','al','del','della','dello','dei','degli','delle',
+    'nel','nella','nello','sul','sulla','sullo','col','coi','dagli','dai','dalle','dalla','allo','alla','agli','alle'
+}
+
+
+def load_and_tokenize_from_file(input_path: str):
     
-    for _, row in df.iterrows(): 
-        if 'text' in row and isinstance(row['text'], str):
-            text = row['text']
-            
-            # Pulisci il testo mantenendo la punteggiatura originale
-            cleaned = clean_text(text)
-            
-            
-                
-            tokens = tokenize_with_nltk(cleaned)
-            
-            if tokens:
-                # Filtra solo token molto corti ma mantieni la punteggiatura
-                filtered_tokens = filter_tokens(tokens)
-                if filtered_tokens:
-                    all_tokens.extend(['<s>'] + filtered_tokens + ['</s>'])
-            #stampa tutti i token per debug
-            print(f"Tokenizzati: {filtered_tokens}")
+    path = Path(input_path)
+    df = pd.read_excel(path)
+    texts = df[df.columns[0]].astype(str)
+    all_tokens = []
+    punctuation_ends = {'.', '!', '?'}
+
+    for raw_text in texts:
+        # Le righe dell'excel sono tutte frasi, tranne l'ultima che è vuota.
+        # Quindi terminiamo raggiunta la prima vuota.
+        if not isinstance(raw_text, str) or not raw_text.strip():
+            continue
+
+        cleaned = clean_text(raw_text)
+        tokens = tokenize_with_nltk(cleaned)
+        filtered_tokens = filter_tokens(tokens)
+
+        # Segmenta in frasi e inserisce tag <s> ... </s>
+        sentence_tokens = []
+        for token in filtered_tokens:
+            sentence_tokens.append(token)
+            if token in punctuation_ends:
+                if sentence_tokens:
+                    all_tokens.extend(['<s>'] + sentence_tokens + ['</s>'])
+                sentence_tokens = []
+        if sentence_tokens:
+            all_tokens.extend(['<s>'] + sentence_tokens + ['</s>'])
 
     return all_tokens
 
 
+    
+
 def analyze_start_end_words(tokens):
-    """
-    Analizza i token per identificare le parole che iniziano e finiscono le frasi.
-    Esclude i segni di punteggiatura come parole di inizio o fine frase.
-    """
+    
     start_words = Counter()
     end_words = Counter()
     punctuation = {'.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
+    # Evita che parole funzione diventino finali
+    bad_end_tokens = {
+        'il','lo','la','i','gli','le','un','uno','una','di','a','da','in','con','su','per','tra','fra',
+        'e','o','che','se','ma','non','mi','ti','si','ci','vi','ne','al','del','della','dello','dei','degli','delle',
+        'nel','nella','nello','sul','sulla','sullo','col','coi','dei','dagli','dai','dalle','dalla','allo','alla','agli','alle'
+    }
     
     for i in range(len(tokens) - 1):
         if tokens[i] == '<s>' and i + 1 < len(tokens):
@@ -49,18 +70,15 @@ def analyze_start_end_words(tokens):
             if tokens[i + 1] not in punctuation:
                 start_words[tokens[i + 1]] += 1
         elif tokens[i + 1] == '</s>' and i >= 0:
-            # Evita che la punteggiatura sia considerata una parola di fine
-            if tokens[i] not in punctuation:
+            # Evita che la punteggiatura o parole funzione siano considerati fine
+            if tokens[i] not in punctuation and tokens[i] not in bad_end_tokens:
                 end_words[tokens[i]] += 1
     
     return start_words, end_words
 
 
 def compute_mle_probs_with_improved_smoothing(tokens, smoothing_factor=0.1):
-    """
-    Calcola le probabilità con Laplace smoothing migliorato.
-    Un fattore di smoothing più basso (0.1 invece di 1) può dare probabilità più realistiche.
-    """
+    
     unigrams = Counter(tokens)
     bigrams = list(ngrams(tokens, 2))
     trigrams = list(ngrams(tokens, 3))
@@ -105,13 +123,6 @@ def compute_mle_probs_with_improved_smoothing(tokens, smoothing_factor=0.1):
 
 
 def select_next_word_weighted(candidates, weights):
-    """
-    Seleziona la prossima parola in base ai pesi (probabilità).
-    Questo rende la selezione più realistica rispetto alla scelta casuale.
-    """
-    if not candidates:
-        return None
-    
     # Normalizza i pesi per evitare problemi numerici
     total_weight = sum(weights)
     if total_weight <= 0:
@@ -121,13 +132,8 @@ def select_next_word_weighted(candidates, weights):
     return random.choices(candidates, weights=normalized_weights, k=1)[0]
 
 
-def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_length=25):
-    """
-    Genera una frase con bigrammi, con selezione pesata delle parole.
-    """
-    if not start_words:
-        return ""
-    
+def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_length=30):
+       
     # Seleziona una parola iniziale pesata in base alla frequenza
     candidates = list(start_words.keys())
     weights = [start_words[word] for word in candidates]
@@ -137,6 +143,13 @@ def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_l
     current_word = first_word
     punctuation = {'.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
     
+    bad_end_tokens = {
+        'il','lo','la','i','gli','le','un','uno','una','di','a','da','in','con','su','per','tra','fra',
+        'e','o','che','se','ma','non','mi','ti','si','ci','vi','ne','al','del','della','dello','dei','degli','delle',
+        'nel','nella','nello','sul','sulla','sullo','col','coi','dei','dagli','dai','dalle','dalla','allo','alla','agli','alle'
+    }
+    allowed_end_tokens = {w for w in end_words.keys() if w not in bad_end_tokens}
+
     for step in range(max_length):
         # Trova tutte le possibili parole successive
         next_words = []
@@ -151,9 +164,9 @@ def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_l
             break
         
         # Verso la fine della frase, favorisci le parole di fine
-        if len(sentence) > max_length * 0.6:  # Inizia prima a cercare finali
-            end_candidates = [w for w in next_words if w in end_words]
-            if end_candidates and random.random() > 0.4:  # 60% di probabilità di usare una parola di fine
+        if len(sentence) > max_length * 0.7:  # Favorisci chiusura verso la fine
+            end_candidates = [w for w in next_words if w in allowed_end_tokens]
+            if end_candidates and random.random() > 0.3:  # 70% di probabilità di usare una parola di fine
                 end_weights = [end_words[w] * next_weights[next_words.index(w)] for w in end_candidates]
                 next_word = select_next_word_weighted(end_candidates, end_weights)
             else:
@@ -172,7 +185,7 @@ def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_l
     return post_process_text(sentence)
 
 
-def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words, max_length=25):
+def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words, max_length=30):
     """
     Genera una frase con trigrammi, con fallback ai bigrammi quando necessario.
     """
@@ -184,7 +197,7 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
     weights = [start_words[word] for word in candidates]
     first_word = select_next_word_weighted(candidates, weights)
     
-    sentence = [first_word]
+    sentence = ['<s>', first_word]
     
     # Trova tutte le possibili seconde parole basate sul primo token
     second_word_candidates = []
@@ -202,8 +215,16 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
     sentence.append(second_word)
     
     current_bigram = (first_word, second_word)
-    punctuation = {'.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
+    punctuation = {'.', ',', '!', '?', ':', ';', '...'}
     
+    # Evita finali deboli
+    bad_end_tokens = {
+        'il','lo','la','i','gli','le','un','uno','una','di','a','da','in','con','su','per','tra','fra',
+        'e','o','che','se','ma','non','mi','ti','si','ci','vi','ne','al','del','della','dello','dei','degli','delle',
+        'nel','nella','nello','sul','sulla','sullo','col','coi','dei','dagli','dai','dalle','dalla','allo','alla','agli','alle'
+    }
+    allowed_end_tokens = {w for w in end_words.keys() if w not in bad_end_tokens}
+
     for step in range(max_length - 2):  # -2 perché abbiamo già aggiunto 2 parole
         # Trova tutte le possibili parole successive basate sul trigramma
         next_words = []
@@ -212,23 +233,26 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
         # Prova con i trigrammi
         for (w1, w2, w3), prob in trigram_probs.items():
             if (w1, w2) == current_bigram:
-                next_words.append(w3)
-                next_weights.append(prob)
+                # Evita punteggiatura consecutiva
+                if not (current_bigram[1] in punctuation and w3 in punctuation):
+                    next_words.append(w3)
+                    next_weights.append(prob)
         
         # Se non ci sono trigrammi, prova con i bigrammi
         if not next_words:
             for (w1, w2), prob in bigram_probs.items():
                 if w1 == current_bigram[1]:
-                    next_words.append(w2)
-                    next_weights.append(prob * 0.7)  # Penalizza leggermente il backoff
+                    if not (current_bigram[1] in punctuation and w2 in punctuation):
+                        next_words.append(w2)
+                        next_weights.append(prob * 0.7)  # Penalizza leggermente il backoff
         
         if not next_words:
             break
         
         # Verso la fine della frase, favorisci le parole di fine
-        if len(sentence) > max_length * 0.6:
-            end_candidates = [w for w in next_words if w in end_words]
-            if end_candidates and random.random() > 0.4:
+        if len(sentence) > max_length * 0.7:
+            end_candidates = [w for w in next_words if w in allowed_end_tokens]
+            if end_candidates and random.random() > 0.3:
                 end_weights = [end_words[w] * next_weights[next_words.index(w)] for w in end_candidates]
                 next_word = select_next_word_weighted(end_candidates, end_weights)
             else:
@@ -246,6 +270,20 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
         current_bigram = (current_bigram[1], next_word)
     
     return post_process_text(sentence)
+
+
+def generate_long_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words, max_length=300, max_output_tokens=200):
+    sentence = generate_sentence_trigram(
+        trigram_probs,
+        bigram_probs,
+        start_words,
+        end_words,
+        max_length=max_length
+    )
+    tokens = sentence.split()
+    if len(tokens) > max_output_tokens:
+        return ' '.join(tokens[:max_output_tokens]) + " [...]"
+    return sentence
 
 
 def calculate_perplexity(test_tokens, bigram_probs, unigrams, smoothing_factor=0.1):
@@ -348,95 +386,117 @@ def post_process_text(tokens):
     # Pulizia finale
     text = text.strip()
     
+    # Trimma eventuali parole funzione in coda (evita finali tipo "delle")
+    text = re.sub(r"\b(" + '|'.join(sorted(BAD_END_TOKENS, key=len, reverse=True)) + r")\s*$", '', text, flags=re.IGNORECASE)
+
     # Correggi eventuali spazi duplicati
     text = re.sub(r'\s+', ' ', text)
     
     # Inserisce maiuscola iniziale
     if text and text[0].islower():
         text = text[0].upper() + text[1:]
+
+    # Garantisci una punteggiatura finale se assente
+    if text and text[-1] not in {'.', '!', '?'}:
+        text = text + '.'
     
     return text
 
 
+def plot_top_ngrams(tokens, n=2, top_k=20, include_special=False, include_punct=False, title=None, save_path=None):
+    """
+    Crea un grafico orizzontale dei top-k n-grammi.
+    Per default esclude <s>, </s> e la punteggiatura.
+    """
+    punct = {'.', ',', '!', '?', ';', ':', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
+
+    toks = tokens if include_special else [t for t in tokens if t not in {'<s>', '</s>'}]
+    if not include_punct:
+        toks = [t for t in toks if t not in punct]
+
+    counts = Counter(ngrams(toks, n))
+    most_common = counts.most_common(top_k)
+    if not most_common:
+        print("Nessun n-gram disponibile per il grafico.")
+        return
+
+    labels = [' '.join(ng) for ng, _ in most_common]
+    values = [c for _, c in most_common]
+
+    plt.figure(figsize=(10, max(4, 0.4 * len(labels))))
+    plt.barh(range(len(labels)), values, color='#4C78A8')
+    plt.yticks(range(len(labels)), labels)
+    plt.gca().invert_yaxis()
+    plt.xlabel('Frequenza')
+    plt.title(title or f'Top {top_k} {"bi" if n==2 else "tri"}grammi')
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=150)
+        print(f"Grafico salvato in: {save_path}")
+        plt.close()
+    else:
+        plt.show()
+
+
 if __name__ == "__main__":
-    username = "GiorgiaMeloni"  # Scegliere username
+    import argparse
     
-    print(f"Caricamento e tokenizzazione del testo per {username}...")
-    tokens = load_and_tokenize_text(username)
-    
-    print(f"Numero totale di token (inclusi <s> e </s>): {len(tokens)}")
-    
-    # Mostra alcuni esempi di token per debug
-    print(f"Primi 20 token: {tokens[:20]}")
-    
-    if len(tokens) < 10:
-        print("ERRORE: Troppo pochi token trovati. Verificare la pulizia del testo.")
-        exit(1)
-    
-    start_words, end_words = analyze_start_end_words(tokens)
-    
-    print(f"Parole di inizio frase: {len(start_words)} uniche")
-    print(f"Parole di fine frase: {len(end_words)} uniche")
-    print(f"Top 10 parole di inizio: {start_words.most_common(10)}")
-    print(f"Top 10 parole di fine: {end_words.most_common(10)}")
-    
-    # Utilizza lo smoothing migliorato
-    bigram_probs, trigram_probs, unigrams, bigram_counts, trigram_counts = \
-        compute_mle_probs_with_improved_smoothing(tokens, smoothing_factor=0.1)
-    
-    vocab_size = len(unigrams)
-    
-    print(f"\nStatistiche del modello:")
-    print(f"Vocabolario: {vocab_size} parole uniche")
-    print(f"Bigrammi unici: {len(bigram_counts)}")
-    print(f"Trigrammi unici: {len(trigram_counts)}")
-    print(f"Top 10 parole più frequenti: {unigrams.most_common(10)}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--user", dest="user", type=str, default="GiorgiaMeloni")
+    args = parser.parse_args()
 
-    print("\nEsempi di frasi generate con Bigrammi migliorati:")
-    for i in range(5):
-        sentence = generate_sentence_with_start_end(bigram_probs, start_words, end_words)
-        print(f"{i+1}. {sentence}")
+    base_dir = Path(__file__).resolve().parent
+    file_path = base_dir / f"{args.user}_tweets.xlsx"
+    if not file_path.exists():
+        print(f"ERRORE: file non trovato: {file_path}")
+        raise SystemExit(1)
 
-    print("\nEsempi di frasi generate con Trigrammi migliorati:")
-    for i in range(5):
-        sentence = generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words)
-        print(f"{i+1}. {sentence}")
+    files_to_process = [str(file_path)]
 
-    # Calcola perplexity di una frase di test
-    test_sentence_raw = "L'Italia è una grande nazione."
-    test_tokens = ['<s>'] + tokenize_with_nltk(test_sentence_raw.lower()) + ['</s>']
-    test_tokens = filter_tokens(test_tokens)
-    
-    print(f"\nFrase di test utilizzata: '{test_sentence_raw}'")
-    print(f"Token dopo filtro: {test_tokens}")
+    project_root = Path(__file__).resolve().parents[1]
 
-    if len(test_tokens) >= 2:
-        perplexity_bigram = calculate_perplexity(test_tokens, bigram_probs, unigrams)
-        print(f"Perplexity della frase di test (Bigram): {perplexity_bigram:.2f}")
+    for input_file in files_to_process:
+        file_path = Path(input_file)
+        user_label = file_path.stem.replace("_tweets", "")
 
-    if len(test_tokens) >= 3:
-        perplexity_trigram = calculate_perplexity_trigram(test_tokens, bigram_probs, trigram_probs, unigrams)
-        print(f"Perplexity della frase di test (Trigram): {perplexity_trigram:.2f}")
-    
-    # Calcola anche perplexity su un esempio reale dal dataset
-    if len(tokens) > 20:
-        # Trova una sequenza che non contenga solo tag speciali
-        real_example = []
-        for i in range(10, min(25, len(tokens))):
-            if tokens[i] not in ['<s>', '</s>']:
-                real_example.append(tokens[i])
-                if len(real_example) >= 8:
-                    break
+        print(f"Caricamento e tokenizzazione del testo da {input_file}...")
+        tokens = load_and_tokenize_from_file(str(file_path))
+
+        print(f"Numero totale di token (inclusi <s> e </s>): {len(tokens)}")
         
-        if real_example:
-            real_example = ['<s>'] + real_example + ['</s>']
-            real_text = post_process_text(real_example)
-            print(f"\nEsempio reale dal dataset: '{real_text}'")
-            
-            if len(real_example) >= 2:
-                perplexity_real_bigram = calculate_perplexity(real_example, bigram_probs, unigrams)
-                print(f"Perplexity dell'esempio reale (Bigram): {perplexity_real_bigram:.2f}")
-            
-            if len(real_example) >= 3:
-                perplexity_real_trigram = calculate_perplexity_trigram(real_example, bigram_probs, trigram_probs, unigrams)
-                print(f"Perplexity dell'esempio reale (Trigram): {perplexity_real_trigram:.2f}")
+
+        start_words, end_words = analyze_start_end_words(tokens)
+        
+        bigram_probs, trigram_probs, unigrams, bigram_counts, trigram_counts = compute_mle_probs_with_improved_smoothing(tokens, smoothing_factor=0.1)
+        
+        #TODO
+
+        print(f"\n[{user_label}] Statistiche del modello:")
+        print(f"Vocabolario: {len(unigrams)} parole uniche")
+        print(f"Bigrammi unici: {len(bigram_counts)}")
+        print(f"Trigrammi unici: {len(trigram_counts)}")
+
+        # Grafici top n-grammi nella root del progetto
+        plot_top_ngrams(
+            tokens,
+            n=2,
+            top_k=20,
+            title=f"{user_label} - Top 20 bigrammi",
+            save_path=str(project_root / f"{user_label}_top_20_bigrammi.png")
+        )
+        plot_top_ngrams(
+            tokens,
+            n=3,
+            top_k=20,
+            title=f"{user_label} - Top 20 trigrammi",
+            save_path=str(project_root / f"{user_label}_top_20_trigrammi.png")
+        )
+
+        print("\nEsempi di frasi generate con Bigrammi:")
+        for i in range(3):
+            print(f"- {generate_sentence_with_start_end(bigram_probs, start_words, end_words)}")
+
+        print("\nEsempi di frasi generate con Trigrammi:")
+        for i in range(3):
+            print(f"- {generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words)}")
