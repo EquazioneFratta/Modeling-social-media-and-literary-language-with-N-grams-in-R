@@ -1,6 +1,7 @@
 import re
 import nltk
-
+import math
+from collections import Counter
 # Decommenta per il primo utilizzo
 # nltk.download('punkt')
 
@@ -112,3 +113,73 @@ def filter_tokens(tokens):
         filtered_tokens.append(token)
 
     return filtered_tokens
+
+
+
+
+
+def calculate_bigram_perplexity(sentence_tokens, bigram_probs, unigrams, smoothing_factor=0.1):
+    
+    
+    log_prob_sum = 0.0
+    N = len(sentence_tokens) - 1
+    V = len(unigrams)
+    
+    for i in range(len(sentence_tokens) - 1):
+        w1, w2 = sentence_tokens[i], sentence_tokens[i + 1]
+        bigram = (w1, w2)
+        
+        if bigram in bigram_probs:
+            prob = bigram_probs[bigram]
+        else:
+            # Smoothing per bigrammi non visti
+            unigram_count = unigrams.get(w1, 0)
+            prob = smoothing_factor / (unigram_count + smoothing_factor * V)
+        
+        log_prob_sum += math.log2(max(prob, 1e-10))
+    
+    return 2 ** (-log_prob_sum / N)
+
+
+def calculate_trigram_perplexity(sentence_tokens, trigram_probs, bigram_counts, smoothing_factor=0.1):
+    """Calcola perplexity trigramma di una frase."""
+    if len(sentence_tokens) < 3:
+        return float('inf')
+    
+    log_prob_sum = 0.0
+    N = len(sentence_tokens) - 2
+    V = len(set(w for _, _, w in trigram_probs.keys()))
+    
+    for i in range(len(sentence_tokens) - 2):
+        w1, w2, w3 = sentence_tokens[i], sentence_tokens[i + 1], sentence_tokens[i + 2]
+        trigram = (w1, w2, w3)
+        
+        if trigram in trigram_probs:
+            prob = trigram_probs[trigram]
+        else:
+            # Smoothing per trigrammi non visti
+            bigram = (w1, w2)
+            bigram_count = bigram_counts.get(bigram, 0)
+            prob = smoothing_factor / (bigram_count + smoothing_factor * V)
+        
+        log_prob_sum += math.log2(max(prob, 1e-10))
+    
+    return 2 ** (-log_prob_sum / N)
+
+
+def evaluate_sentence(sentence, bigram_probs, trigram_probs, unigrams, bigram_counts):
+    
+    cleaned = clean_text(sentence)
+    tokens = tokenize_with_nltk(cleaned)
+    filtered_tokens = filter_tokens(tokens)
+    sentence_tokens = ['<s>'] + filtered_tokens + ['</s>']
+    
+    # Calcola perplexity
+    bigram_perp = calculate_bigram_perplexity(sentence_tokens, bigram_probs, unigrams)
+    trigram_perp = calculate_trigram_perplexity(sentence_tokens, trigram_probs, bigram_counts)
+    
+    return bigram_perp, trigram_perp
+
+
+
+    

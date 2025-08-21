@@ -6,7 +6,7 @@ from pathlib import Path
 from nltk.util import ngrams
 import matplotlib.pyplot as plt
 
-from lib import clean_text, tokenize_english, filter_tokens
+from lib import clean_text, tokenize_english, filter_tokens, evaluate_sentence
 
 
 
@@ -33,30 +33,30 @@ def load_and_tokenize_mobydick(filepath):
 
 
 def analyze_start_end_words(tokens):
-    """
-    Analizza i token per identificare le parole che iniziano e finiscono le frasi.
-    Esclude i segni di punteggiatura come parole di inizio o fine frase.
-    """
+    
     start_words = Counter()
     end_words = Counter()
-    punctuation = ['.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"]
+    punctuation = {'.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
+    # Parole funzione inglesi da evitare come parole finali
+    bad_end_tokens = {
+        'the','a','an','and','or','but','of','to','in','on','for','with','at','by','from','as','that','this','these','those',
+        'is','are','was','were','be','am','been','being','do','does','did','so','not','if','than','then',
+        'i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their'
+    }
     
     for i in range(len(tokens) - 1):
         if tokens[i] == '<s>' and i + 1 < len(tokens):
-            # Evita che la punteggiatura sia considerata una parola di inizio
             if tokens[i + 1] not in punctuation:
                 start_words[tokens[i + 1]] += 1
         elif tokens[i + 1] == '</s>' and i >= 0:
-            end_words[tokens[i]] += 1
+            if tokens[i] not in punctuation and tokens[i] not in bad_end_tokens:
+                end_words[tokens[i]] += 1
     
     return start_words, end_words
 
 
 def compute_mle_probs_with_improved_smoothing(tokens, smoothing_factor=0.1):
-    """
-    Calcola le probabilità con Laplace smoothing migliorato.
-    Un fattore di smoothing più basso (0.1 invece di 1) può dare probabilità più realistiche.
-    """
+   
     unigrams = Counter(tokens)
     bigrams = list(ngrams(tokens, 2))
     trigrams = list(ngrams(tokens, 3))
@@ -101,11 +101,8 @@ def compute_mle_probs_with_improved_smoothing(tokens, smoothing_factor=0.1):
 
 
 def select_next_word_weighted(candidates, weights):
-    """
-    Seleziona la prossima parola in base ai pesi (probabilità).
-    Questo rende la selezione più realistica rispetto alla scelta casuale.
-    """
-    if not candidates:
+    
+    if not candidates or not weights:
         return None
     total_weight = sum(weights)
     if total_weight <= 0:
@@ -115,173 +112,103 @@ def select_next_word_weighted(candidates, weights):
 
 
 def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_length=30):
-    """
-    Genera una frase con bigrammi, con selezione pesata delle parole.
-    """
+    
     if not start_words:
         return ""
     
-    # Seleziona una parola iniziale pesata in base alla frequenza
     candidates = list(start_words.keys())
     weights = [start_words[word] for word in candidates]
-    first_word = select_next_word_weighted(candidates, weights) 
+    first_word = select_next_word_weighted(candidates, weights)
+    if first_word is None:
+        if not candidates:
+            return ""
+        first_word = random.choice(candidates)
     
-    sentence = [first_word]
+    sentence = ['<s>', first_word]
     current_word = first_word
-    punctuation = ['.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"]
+    punctuation = {'.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
+    bad_end_tokens = {
+        'the','a','an','and','or','but','of','to','in','on','for','with','at','by','from','as','that','this','these','those',
+        'is','are','was','were','be','am','been','being','do','does','did','so','not','if','than','then',
+        'i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their'
+    }
+    allowed_end_tokens = {w for w in end_words.keys() if w not in bad_end_tokens}
     
     for _ in range(max_length):
-        # Trova tutte le possibili parole successive
         next_words = []
         next_weights = []
-        
         for (w1, w2), prob in bigram_probs.items():
             if w1 == current_word:
-                # Evita punteggiatura consecutiva
                 if not (current_word in punctuation and w2 in punctuation):
                     next_words.append(w2)
                     next_weights.append(prob)
-        
         if not next_words:
             break
         
-        # Verso la fine della frase, favorisci le parole di fine
         if len(sentence) > max_length * 0.7:
-            end_candidates = [w for w in next_words if w in end_words]
-            if end_candidates and random.random() > 0.3:  # 70% di probabilità di usare una parola di fine
-                end_weights = [end_words[w] for w in end_candidates]
+            end_candidates = [w for w in next_words if w in allowed_end_tokens]
+            if end_candidates and random.random() > 0.3:
+                end_weights = [end_words[w] * next_weights[next_words.index(w)] for w in end_candidates]
                 next_word = select_next_word_weighted(end_candidates, end_weights)
             else:
                 next_word = select_next_word_weighted(next_words, next_weights)
         else:
             next_word = select_next_word_weighted(next_words, next_weights)
+        if next_word is None:
+            break
         
         sentence.append(next_word)
-        # Termina se raggiungiamo un punto fermo o end-of-sentence
         if next_word == '</s>' or (next_word == '.' and random.random() > 0.3):
             break
         current_word = next_word
     
     return post_process_text(sentence)
 
-def calculate_perplexity(test_tokens, bigram_probs, unigrams, smoothing_factor=0.1):
-    """
-    Calcola perplexity con smoothing migliorato e gestione di OOV.
-    """
-    if len(test_tokens) < 2:
-        return float('inf')
-    N = len(test_tokens) - 1
-    sum_log_prob = 0.0
-    V = len(unigrams)
-    
-    for i in range(1, N):
-        w1, w2 = test_tokens[i - 1], test_tokens[i]
-        
-        # Gestione di parole fuori vocabolario (OOV)
-        if (w1, w2) in bigram_probs:
-            prob = bigram_probs[(w1, w2)]
-        elif w1 in unigrams:
-            # Backoff a unigram con smoothing
-            prob = smoothing_factor / (unigrams[w1] + smoothing_factor * V)
-        else:
-            # Parola OOV, usa una probabilità uniforme
-            prob = 1 / V
-        
-        sum_log_prob += math.log2(prob)  # Usando log base 2 invece di log naturale
-
-    # Calcola perplexity con sicurezza per evitare valori estremi
-    avg_log_prob = sum_log_prob / N
-    perplexity = pow(2, -avg_log_prob)
-    
-    return min(perplexity, 10000)  # Limita valori estremi
-
-
-def calculate_perplexity_trigram(test_tokens, bigram_probs, trigram_probs, unigrams, smoothing_factor=0.1):
-    """
-    Calcola perplexity per il modello trigram con smoothing e gestione OOV migliorati.
-    """
-    if len(test_tokens) < 3:
-        return float('inf')
-    N = len(test_tokens) - 2
-    sum_log_prob = 0.0
-    V = len(unigrams)
-    
-    for i in range(2, N):
-        w1, w2, w3 = test_tokens[i - 2], test_tokens[i - 1], test_tokens[i]
-        
-        # Modello a cascata con backoff
-        if (w1, w2, w3) in trigram_probs:
-            prob = trigram_probs[(w1, w2, w3)]
-        elif (w2, w3) in bigram_probs:
-            prob = bigram_probs[(w2, w3)] * 0.4  # Penalità per backoff
-        elif w3 in unigrams:
-            prob = (unigrams[w3] / sum(unigrams.values())) * 0.1  # Penalità maggiore
-        else:
-            # Parola OOV
-            prob = smoothing_factor / V
-        
-        sum_log_prob += math.log2(prob)  # Usando log base 2
-    
-    avg_log_prob = sum_log_prob / N
-    perplexity = pow(2, -avg_log_prob)
-    
-    return min(perplexity, 10000)  # Limita valori estremi
+## Perplexity calcolata ora in lib.evaluate_sentence
 
 
 def post_process_text(tokens):
-    """
-    Applica una serie di euristiche migliorate per la formattazione del testo.
-    """
-    # Rimuovi i tag speciali
+   
     tokens = [t for t in tokens if t not in ['<s>', '</s>']]
-    
     if not tokens:
         return ""
     
     text = ""
-    punctuation = ['.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"]
+    punctuation_no_space_before = {'.', ',', '!', '?', ':', ';', ')', ']', '}', "'"}
+    punctuation_no_space_after = {'(', '[', '{'}
     
     for i, token in enumerate(tokens):
-        # Gestione della punteggiatura - evita spazi prima
-        if token in punctuation:
+        if token in punctuation_no_space_before:
             text = text.rstrip() + token + " "
-        # Gestione di simboli speciali
-        elif token in ["€", "$", "°C", "°F", "%", "°", "n°", "km/h"]:
-            if i > 0 and tokens[i-1].isdigit():
-                text = text.rstrip() + token + " "
-            else:
-                text += token + " "
-        # Gestione delle parentesi
-        elif token in ["(", "[", "{"]:
+        elif token in punctuation_no_space_after:
             text += token
-        elif token in [")", "]", "}"]:
-            text = text.rstrip() + token + " "
-        # Gestione degli apostrofi
         elif token.startswith("'") and len(token) > 1:
             text = text.rstrip() + token + " "
-        # Gestione normale per le altre parole
         else:
             text += token + " "
     
-    # Pulizia finale
     text = text.strip()
     
-    # Correggi eventuali spazi duplicati
+    # Evita finali deboli (inglese)
+    bad_end_tokens = {
+        'the','a','an','and','or','but','of','to','in','on','for','with','at','by','from','as','that','this','these','those',
+        'is','are','was','were','be','am','been','being','do','does','did','so','not','if','than','then',
+        'i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their'
+    }
+    if bad_end_tokens:
+        pattern = r"\b(" + '|'.join(sorted(bad_end_tokens, key=len, reverse=True)) + r")\s*$"
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+    
     text = re.sub(r'\s+', ' ', text)
-    
-    # Inserisce maiuscola
-    
-    if text and text[0].isalpha():
+    if text and text[0].islower():
         text = text[0].upper() + text[1:]
-    
+    if text and text[-1] not in {'.', '!', '?'}:
+        text = text + '.'
     return text
 
 
 def generate_long_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words, max_length=300, max_output_tokens=200):
-    """
-    Genera una frase con trigrammi fino a max_length token (con chiusura naturale), 
-    e mostra solo i primi max_output_tokens token per evitare output prolisso.
-    """
+    
     sentence = generate_sentence_trigram(
         trigram_probs,
         bigram_probs,
@@ -299,9 +226,7 @@ def generate_long_sentence_trigram(trigram_probs, bigram_probs, start_words, end
 
 
 def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words, max_length=30):
-    """
-    Genera una frase con trigrammi, con fallback ai bigrammi quando necessario.
-    """
+    
     if not start_words:
         return ""
     
@@ -328,7 +253,13 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
     sentence.append(second_word)
     
     current_bigram = (first_word, second_word)
-    punctuation = ['.', ',', '!', '?', ':', ';', '...']
+    punctuation = {'.', ',', '!', '?', ':', ';', '...'}
+    bad_end_tokens = {
+        'the','a','an','and','or','but','of','to','in','on','for','with','at','by','from','as','that','this','these','those',
+        'is','are','was','were','be','am','been','being','do','does','did','so','not','if','than','then',
+        'i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their'
+    }
+    allowed_end_tokens = {w for w in end_words.keys() if w not in bad_end_tokens}
     
     for _ in range(max_length - 2):  # -2 perché abbiamo già aggiunto 2 parole
         # Trova tutte le possibili parole successive basate sul trigramma
@@ -356,8 +287,8 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
         
         # Verso la fine della frase, favorisci le parole di fine
         if len(sentence) > max_length * 0.7:
-            end_candidates = [w for w in next_words if w in end_words]
-            if end_candidates and random.random() > 0.3:  # 70% di probabilità di usare una parola di fine
+            end_candidates = [w for w in next_words if w in allowed_end_tokens]
+            if end_candidates and random.random() > 0.3:
                 end_weights = [end_words[w] * next_weights[next_words.index(w)] for w in end_candidates]
                 next_word = select_next_word_weighted(end_candidates, end_weights)
             else:
@@ -375,10 +306,7 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
     return post_process_text(sentence)
 
 def plot_top_ngrams(tokens, n=2, top_k=20, include_special=False, include_punct=False, title=None, save_path=None):
-    """
-    Crea un grafico orizzontale dei top-k n-grammi.
-    Per default esclude <s>, </s> e la punteggiatura.
-    """
+    
     punct = {'.', ',', '!', '?', ';', ':', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
 
     toks = tokens if include_special else [t for t in tokens if t not in {'<s>', '</s>'}]
@@ -440,6 +368,19 @@ if __name__ == "__main__":
         title='Moby Dick - Top 20 trigrammi',
         save_path=str(project_root / 'MobyDick_top_20_trigrammi.png')
     )
+
+    # Valutazione perplexity su frasi di esempio
+    sample_sentence = "It is one of the white whale in the sea"
+    perp_bi, perp_tri = evaluate_sentence(sample_sentence, bigram_probs, trigram_probs, unigrams, bigram_counts)
+    print(f"\nFrase: {sample_sentence}")
+    print(f"Perplexity bigram: {perp_bi:.2f}")
+    print(f"Perplexity trigram: {perp_tri:.2f}")
+
+    sample_sentence = "The whale swims in the vast ocean under the cold sky with a chainsaw."
+    perp_bi, perp_tri = evaluate_sentence(sample_sentence, bigram_probs, trigram_probs, unigrams, bigram_counts)
+    print(f"Frase: {sample_sentence}")
+    print(f"Perplexity bigram: {perp_bi:.2f}")
+    print(f"Perplexity trigram: {perp_tri:.2f}")
 
     print("\nEsempi di frasi generate con Bigrammi:")
     for _ in range(3):
