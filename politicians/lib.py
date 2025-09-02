@@ -15,7 +15,6 @@ def clean_text(text):
     # Rimuovi pattern di link comuni
     extracted_text = re.sub(r't\.co/\S+', '', extracted_text)
     
-    
     # Emoticons
     extracted_text = re.sub(r'[\U0001F600-\U0001F64F]', '', extracted_text)
     # Simboli e pittogrammi
@@ -115,11 +114,7 @@ def filter_tokens(tokens):
     return filtered_tokens
 
 
-
-
-
 def calculate_bigram_perplexity(sentence_tokens, bigram_probs, unigrams, smoothing_factor=0.1):
-    
     
     log_prob_sum = 0.0
     N = len(sentence_tokens) - 1

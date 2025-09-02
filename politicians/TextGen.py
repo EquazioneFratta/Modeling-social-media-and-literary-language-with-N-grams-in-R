@@ -1,23 +1,21 @@
 import pandas as pd
 import argparse
 import random
-import math
 import re
-from collections import defaultdict, Counter
+from collections import Counter
 from nltk.util import ngrams
 from pathlib import Path
 import matplotlib.pyplot as plt
 
 from lib import clean_text, tokenize_with_nltk, filter_tokens, evaluate_sentence
 
-
-# Parole funzione da evitare come parola finale delle frasi
 BAD_END_TOKENS = {
     'il','lo','la','i','gli','le','un','uno','una','di','a','da','in','con','su','per','tra','fra',
     'e','o','che','se','ma','non','mi','ti','si','ci','vi','ne','al','del','della','dello','dei','degli','delle',
     'nel','nella','nello','sul','sulla','sullo','col','coi','dagli','dai','dalle','dalla','allo','alla','agli','alle'
 }
 
+PUNCTUATION = {'.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
 
 def load_and_tokenize_from_file(input_path: str):
     
@@ -28,8 +26,6 @@ def load_and_tokenize_from_file(input_path: str):
     punctuation_ends = {'.', '!', '?'}
 
     for raw_text in texts:
-        # Le righe dell'excel sono tutte frasi, tranne l'ultima che è vuota.
-        # Quindi terminiamo raggiunta la prima vuota.
         if not isinstance(raw_text, str) or not raw_text.strip():
             continue
 
@@ -37,7 +33,7 @@ def load_and_tokenize_from_file(input_path: str):
         tokens = tokenize_with_nltk(cleaned)
         filtered_tokens = filter_tokens(tokens)
 
-        # Segmenta in frasi e inserisce tag <s> ... </s>
+        # Divide in frasi e inserisce tag <s> ... </s>
         sentence_tokens = []
         for token in filtered_tokens:
             sentence_tokens.append(token)
@@ -51,28 +47,18 @@ def load_and_tokenize_from_file(input_path: str):
     return all_tokens
 
 
-    
-
 def analyze_start_end_words(tokens):
     
     start_words = Counter()
     end_words = Counter()
-    punctuation = {'.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
-    # Evita che parole funzione diventino finali
-    bad_end_tokens = {
-        'il','lo','la','i','gli','le','un','uno','una','di','a','da','in','con','su','per','tra','fra',
-        'e','o','che','se','ma','non','mi','ti','si','ci','vi','ne','al','del','della','dello','dei','degli','delle',
-        'nel','nella','nello','sul','sulla','sullo','col','coi','dei','dagli','dai','dalle','dalla','allo','alla','agli','alle'
-    }
-    
+        
     for i in range(len(tokens) - 1):
         if tokens[i] == '<s>' and i + 1 < len(tokens):
             # Evita che la punteggiatura sia considerata una parola di inizio
-            if tokens[i + 1] not in punctuation:
+            if tokens[i + 1] not in PUNCTUATION:
                 start_words[tokens[i + 1]] += 1
         elif tokens[i + 1] == '</s>' and i >= 0:
-            # Evita che la punteggiatura o parole funzione siano considerati fine
-            if tokens[i] not in punctuation and tokens[i] not in bad_end_tokens:
+            if tokens[i] not in PUNCTUATION and tokens[i] not in BAD_END_TOKENS:
                 end_words[tokens[i]] += 1
     
     return start_words, end_words
@@ -87,19 +73,17 @@ def compute_mle_probs_with_improved_smoothing(tokens, smoothing_factor=0.1):
     bigram_counts = Counter(bigrams)
     trigram_counts = Counter(trigrams)
 
-    # Rimuovi combinazioni di punteggiatura non valide
-    punctuation = {'.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
     filtered_bigram_counts = Counter()
     filtered_trigram_counts = Counter()
     
     for (w1, w2), count in bigram_counts.items():
         # Evita sequenze di punteggiatura consecutiva non naturali
-        if not (w1 in punctuation and w2 in punctuation and w1 != '.' and w2 != '.'):
+        if not (w1 in PUNCTUATION and w2 in PUNCTUATION and w1 != '.' and w2 != '.'):
             filtered_bigram_counts[(w1, w2)] = count
     
     for (w1, w2, w3), count in trigram_counts.items():
         # Evita sequenze di punteggiatura consecutiva non naturali
-        punctuation_count = sum([w in punctuation for w in [w1, w2, w3]])
+        punctuation_count = sum([w in PUNCTUATION for w in [w1, w2, w3]])
         if punctuation_count < 2:  # Massimo una parola di punteggiatura nel trigram
             filtered_trigram_counts[(w1, w2, w3)] = count
 
@@ -137,9 +121,9 @@ def select_next_word_weighted(candidates, weights):
 
 def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_length=30):
        
-    # Seleziona una parola iniziale pesata in base alla frequenza. start.words è un dict
+    # Seleziona una parola iniziale pesata in base alla frequenza
     candidates = list(start_words.keys())
-    weights = [start_words[word] for word in candidates] #prende la frequenza di ogni parola
+    weights = [start_words[word] for word in candidates]
     first_word = select_next_word_weighted(candidates, weights)
     if first_word is None:
         if not candidates:
@@ -148,15 +132,10 @@ def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_l
     
     sentence = ['<s>', first_word]
     current_word = first_word
-    
-    bad_end_tokens = {
-        'il','lo','la','i','gli','le','un','uno','una','di','a','da','in','con','su','per','tra','fra',
-        'e','o','che','se','ma','non','mi','ti','si','ci','vi','ne','al','del','della','dello','dei','degli','delle',
-        'nel','nella','nello','sul','sulla','sullo','col','coi','dei','dagli','dai','dalle','dalla','allo','alla','agli','alle'
-    }
-    allowed_end_tokens = {w for w in end_words.keys() if w not in bad_end_tokens}
 
-    for step in range(max_length):
+    allowed_end_tokens = {w for w in end_words.keys() if w not in BAD_END_TOKENS}
+
+    for _ in range(max_length):
         # Trova tutte le possibili parole successive
         next_words = []
         next_weights = []
@@ -169,11 +148,11 @@ def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_l
         if not next_words:
             break
         
-        # Verso la fine della frase, favorisci le parole di fine
-        if len(sentence) > max_length * 0.7:  # Favorisci chiusura verso la fine
+        # Favorisce le parole di fine
+        if len(sentence) > max_length * 0.7:  
             # Crea una lista di possibili parole successive che sono anche parole di fine ammesse
             end_candidates = [w for w in next_words if w in allowed_end_tokens]
-            if end_candidates and random.random() > 0.3:  # 70% di probabilità di usare una parola di fine
+            if end_candidates and random.random() > 0.3:  
                 end_weights = [end_words[w] * next_weights[next_words.index(w)] for w in end_candidates]
                 next_word = select_next_word_weighted(end_candidates, end_weights)
             else:
@@ -221,7 +200,7 @@ def generate_sentence_trigram(trigram_probs, start_words, end_words, max_length=
             if w1 == '<s>' and w2 == first_word:
                 second_word_candidates.append(w3)
                 second_word_weights.append(prob)
-    # Se ancora vuoto (caso molto raro), scegli a caso tra tutto il vocabolario trigrammi
+
     if not second_word_candidates:
         all_w3 = set(w3 for (_, _, w3) in trigram_probs.keys())
         second_word_candidates = list(all_w3)
@@ -235,24 +214,18 @@ def generate_sentence_trigram(trigram_probs, start_words, end_words, max_length=
     sentence.append(second_word)
     
     current_words = (first_word, second_word)
-    punctuation = {'.', ',', '!', '?', ':', ';', '...'}
+    end_punctuation = {'.', ',', '!', '?', ':', ';', '...'}
     
-    # Evita finali deboli
-    bad_end_tokens = {
-        'il','lo','la','i','gli','le','un','uno','una','di','a','da','in','con','su','per','tra','fra',
-        'e','o','che','se','ma','non','mi','ti','si','ci','vi','ne','al','del','della','dello','dei','degli','delle',
-        'nel','nella','nello','sul','sulla','sullo','col','coi','dei','dagli','dai','dalle','dalla','allo','alla','agli','alle'
-    }
-    allowed_end_tokens = {w for w in end_words.keys() if w not in bad_end_tokens}
+    allowed_end_tokens = {w for w in end_words.keys() if w not in BAD_END_TOKENS}
 
-    for step in range(max_length - 2):  # -2 perché abbiamo già aggiunto 2 parole
+    for _ in range(max_length - 2):  # -2 perché abbiamo già aggiunto 2 parole
         # Trova tutte le possibili parole successive basate solo sul trigramma
         next_words = []
         next_weights = []
         for (w1, w2, w3), prob in trigram_probs.items():
             if (w1, w2) == current_words:
                 # Evita punteggiatura consecutiva
-                if not (current_words[1] in punctuation and w3 in punctuation):
+                if not (current_words[1] in end_punctuation and w3 in end_punctuation):
                     next_words.append(w3)
                     next_weights.append(prob)
         # Se non ci sono trigrammi, scegli dal vocabolario dei terzi elementi o termina
@@ -282,7 +255,6 @@ def generate_sentence_trigram(trigram_probs, start_words, end_words, max_length=
         if next_word == '</s>' or (next_word == '.' and random.random() > 0.3):
             break
         
-        # Aggiorna il bigram corrente
         current_words = (current_words[1], next_word)
     return post_process_text(sentence)
 
@@ -296,7 +268,7 @@ def post_process_text(tokens):
     punctuation_no_space_before = {'.', ',', '!', '?', ':', ';', ')', ']', '}', "'"}
     punctuation_no_space_after = {'(', '[', '{'}
     
-    for i, token in enumerate(tokens):
+    for _, token in enumerate(tokens):
         # Gestione della punteggiatura - evita spazi prima di certi segni
         if token in punctuation_no_space_before:
             text = text.rstrip() + token + " "
@@ -312,7 +284,6 @@ def post_process_text(tokens):
     # Pulizia finale
     text = text.strip()
     
-    # Trimma eventuali parole funzione in coda (evita finali tipo "delle")
     text = re.sub(r"\b(" + '|'.join(sorted(BAD_END_TOKENS, key=len, reverse=True)) + r")\s*$", '', text, flags=re.IGNORECASE)
 
     # Correggi eventuali spazi duplicati
@@ -369,7 +340,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     base_dir = Path(__file__).resolve().parent
-    file_path = base_dir / f"{args.user}_tweets.xlsx"
+    file_path = base_dir / f"data/{args.user}_tweets.xlsx"
     if not file_path.exists():
         print(f"ERRORE: file non trovato: {file_path}")
         raise SystemExit(1)
@@ -411,7 +382,7 @@ if __name__ == "__main__":
         print(f"Frase: {frase}")
         print(f"Perplexity bigram: {perp_bi:.2f}")
         print(f"Perplexity trigram: {perp_tri:.2f}")
-        # Grafici top n-grammi nella root del progetto
+
         plot_top_ngrams(
             tokens,
             n=2,
