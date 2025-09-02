@@ -207,23 +207,6 @@ def post_process_text(tokens):
     return text
 
 
-def generate_long_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words, max_length=300, max_output_tokens=200):
-    
-    sentence = generate_sentence_trigram(
-        trigram_probs,
-        bigram_probs,
-        start_words,
-        end_words,
-        max_length=max_length
-    )
-    tokens = sentence.split()
-    
-    if len(tokens) > max_output_tokens:
-        shortened = ' '.join(tokens[:max_output_tokens]) + " [...]"
-        return shortened
-    else:
-        return sentence
-
 
 def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words, max_length=30):
     
@@ -390,8 +373,5 @@ if __name__ == "__main__":
     for _ in range(3):
         print("-", generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words))
 
-    print("\nEsempi di frasi lunghe generate con Trigrammi (troncate):")
-    for _ in range(2):
-        print("\n---\n", generate_long_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words))
 
 

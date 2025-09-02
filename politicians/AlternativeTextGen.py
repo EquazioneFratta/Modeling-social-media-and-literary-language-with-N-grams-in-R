@@ -1,4 +1,5 @@
 import pandas as pd
+import argparse
 import random
 import math
 import re
@@ -286,23 +287,6 @@ def generate_sentence_trigram(trigram_probs, start_words, end_words, max_length=
     return post_process_text(sentence)
 
 
-def generate_long_sentence_trigram(trigram_probs, bigram_probs, start_words, end_words, max_length=300, max_output_tokens=200):
-    sentence = generate_sentence_trigram(
-        trigram_probs,
-        bigram_probs,
-        start_words,
-        end_words,
-        max_length=max_length
-    )
-    tokens = sentence.split()
-    if len(tokens) > max_output_tokens:
-        return ' '.join(tokens[:max_output_tokens]) + " [...]"
-    return sentence
-
-
-
-
-
 def post_process_text(tokens):
     
     # Rimuovi i tag speciali
@@ -379,7 +363,6 @@ def plot_top_ngrams(tokens, n=2, top_k=20, include_special=False, include_punct=
 
 
 if __name__ == "__main__":
-    import argparse
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--user", dest="user", type=str, default="GiorgiaMeloni")

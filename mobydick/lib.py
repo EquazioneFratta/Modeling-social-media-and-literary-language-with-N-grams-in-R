@@ -14,12 +14,6 @@ def clean_text(text):
     return text
 
 
-def tokenize_with_punctuation(text):
-  
-    pattern = r"\w+(?:'\w+)?|[.,!?;:()\[\]{}]"
-    return re.findall(pattern, text)
-
-
 def filter_tokens(tokens):
     
     if not tokens:
@@ -54,14 +48,13 @@ def tokenize_english(text):
    
     if not text:
         return []
-    try:
-        sentences = nltk.sent_tokenize(text, language='english')
-        tokens = []
-        for sentence in sentences:
-            tokens.extend(nltk.word_tokenize(sentence, language='english'))
-        return tokens
-    except Exception:
-        return tokenize_with_punctuation(text)
+
+    sentences = nltk.sent_tokenize(text, language='english')
+    tokens = []
+    for sentence in sentences:
+        tokens.extend(nltk.word_tokenize(sentence, language='english'))
+    return tokens
+    
 
 
 def calculate_bigram_perplexity(sentence_tokens, bigram_probs, unigrams, smoothing_factor=0.1):
