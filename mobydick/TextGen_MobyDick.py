@@ -264,9 +264,11 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
     
     return post_process_text(sentence)
 
-def plot_top_ngrams(tokens, n=2, top_k=20, include_special=False, title=None, save_path=None):
+def plot_top_ngrams(tokens, n=2, top_k=20, include_special=False, include_punct=False, title=None, save_path=None):
     
     toks = tokens if include_special else [t for t in tokens if t not in {'<s>', '</s>'}]
+    if not include_punct:
+            toks = [t for t in toks if t not in PUNCTUATION]
 
     counts = Counter(ngrams(toks, n))
     most_common = counts.most_common(top_k)
