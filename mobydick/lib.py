@@ -1,15 +1,12 @@
 import re
 import nltk
 import math
-from collections import Counter
 
 def clean_text(text):
     
     if not text or not isinstance(text, str):
         return ""
 
-
-    # Normalize whitespace and lowercase
     text = re.sub(r'\s+', ' ', text).strip().lower()
     return text
 
@@ -36,7 +33,6 @@ def filter_tokens(tokens):
         if token in important_punctuation:
             filtered_tokens.append(token)
         elif len(token) > 1 or token in allowed_short_words:
-            # English letters, apostrophes, and hyphens
             if re.match(r"^[a-zA-Z][a-zA-Z\-'’]*$", token) or token in allowed_short_words:
                 filtered_tokens.append(token)
         elif token.isdigit() and len(token) >= 2:
@@ -58,7 +54,6 @@ def tokenize_english(text):
 
 
 def calculate_bigram_perplexity(sentence_tokens, bigram_probs, unigrams, smoothing_factor=0.1):
-    
     
     log_prob_sum = 0.0
     N = len(sentence_tokens) - 1

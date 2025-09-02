@@ -1,14 +1,18 @@
 import re
 import random
-import math
+import matplotlib.pyplot as plt
 from collections import Counter
 from pathlib import Path
 from nltk.util import ngrams
-import matplotlib.pyplot as plt
-
 from lib import clean_text, tokenize_english, filter_tokens, evaluate_sentence
 
+BAD_END_TOKENS = {
+    'the','a','an','and','or','but','of','to','in','on','for','with','at','by','from','as','that','this','these','those',
+    'is','are','was','were','be','am','been','being','do','does','did','so','not','if','than','then',
+    'i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their'
+}
 
+PUNCTUATION = {'.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
 
 def load_and_tokenize_mobydick(filepath):
     with open(filepath, 'r', encoding='utf-8') as f:
@@ -36,20 +40,13 @@ def analyze_start_end_words(tokens):
     
     start_words = Counter()
     end_words = Counter()
-    punctuation = {'.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
-    # Parole funzione inglesi da evitare come parole finali
-    bad_end_tokens = {
-        'the','a','an','and','or','but','of','to','in','on','for','with','at','by','from','as','that','this','these','those',
-        'is','are','was','were','be','am','been','being','do','does','did','so','not','if','than','then',
-        'i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their'
-    }
-    
+
     for i in range(len(tokens) - 1):
         if tokens[i] == '<s>' and i + 1 < len(tokens):
-            if tokens[i + 1] not in punctuation:
+            if tokens[i + 1] not in PUNCTUATION:
                 start_words[tokens[i + 1]] += 1
         elif tokens[i + 1] == '</s>' and i >= 0:
-            if tokens[i] not in punctuation and tokens[i] not in bad_end_tokens:
+            if tokens[i] not in PUNCTUATION and tokens[i] not in BAD_END_TOKENS:
                 end_words[tokens[i]] += 1
     
     return start_words, end_words
@@ -64,19 +61,17 @@ def compute_mle_probs_with_improved_smoothing(tokens, smoothing_factor=0.1):
     bigram_counts = Counter(bigrams)
     trigram_counts = Counter(trigrams)
 
-    # Rimuovi combinazioni di punteggiatura non valide
-    punctuation = ['.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"]
     filtered_bigram_counts = Counter()
     filtered_trigram_counts = Counter()
     
     for (w1, w2), count in bigram_counts.items():
         # Evita sequenze di punteggiatura consecutiva
-        if not (w1 in punctuation and w2 in punctuation):
+        if not (w1 in PUNCTUATION and w2 in PUNCTUATION):
             filtered_bigram_counts[(w1, w2)] = count
     
     for (w1, w2, w3), count in trigram_counts.items():
-        # Evita sequenze di punteggiatura consecutiva (consenti al massimo un segno di punteggiatura)
-        punctuation_count = int(w1 in punctuation) + int(w2 in punctuation) + int(w3 in punctuation)
+        # Evita sequenze di punteggiatura consecutiva 
+        punctuation_count = int(w1 in PUNCTUATION) + int(w2 in PUNCTUATION) + int(w3 in PUNCTUATION)
         if punctuation_count < 2:
             filtered_trigram_counts[(w1, w2, w3)] = count
 
@@ -126,20 +121,15 @@ def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_l
     
     sentence = ['<s>', first_word]
     current_word = first_word
-    punctuation = {'.', ',', '!', '?', ':', ';', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
-    bad_end_tokens = {
-        'the','a','an','and','or','but','of','to','in','on','for','with','at','by','from','as','that','this','these','those',
-        'is','are','was','were','be','am','been','being','do','does','did','so','not','if','than','then',
-        'i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their'
-    }
-    allowed_end_tokens = {w for w in end_words.keys() if w not in bad_end_tokens}
+
+    allowed_end_tokens = {w for w in end_words.keys() if w not in BAD_END_TOKENS}
     
     for _ in range(max_length):
         next_words = []
         next_weights = []
         for (w1, w2), prob in bigram_probs.items():
             if w1 == current_word:
-                if not (current_word in punctuation and w2 in punctuation):
+                if not (current_word in PUNCTUATION and w2 in PUNCTUATION):
                     next_words.append(w2)
                     next_weights.append(prob)
         if not next_words:
@@ -164,8 +154,6 @@ def generate_sentence_with_start_end(bigram_probs, start_words, end_words, max_l
     
     return post_process_text(sentence)
 
-## Perplexity calcolata ora in lib.evaluate_sentence
-
 
 def post_process_text(tokens):
    
@@ -188,15 +176,9 @@ def post_process_text(tokens):
             text += token + " "
     
     text = text.strip()
-    
-    # Evita finali deboli (inglese)
-    bad_end_tokens = {
-        'the','a','an','and','or','but','of','to','in','on','for','with','at','by','from','as','that','this','these','those',
-        'is','are','was','were','be','am','been','being','do','does','did','so','not','if','than','then',
-        'i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their'
-    }
-    if bad_end_tokens:
-        pattern = r"\b(" + '|'.join(sorted(bad_end_tokens, key=len, reverse=True)) + r")\s*$"
+ 
+    if BAD_END_TOKENS:
+        pattern = r"\b(" + '|'.join(sorted(BAD_END_TOKENS, key=len, reverse=True)) + r")\s*$"
         text = re.sub(pattern, '', text, flags=re.IGNORECASE)
     
     text = re.sub(r'\s+', ' ', text)
@@ -218,7 +200,7 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
     weights = [start_words[word] for word in candidates]
     first_word = select_next_word_weighted(candidates, weights)
     
-    sentence = ['<s>', first_word]  # Inizia con <s> per chiarezza
+    sentence = ['<s>', first_word]  
     
     # Trova tutte le possibili seconde parole basate sul primo token
     second_word_candidates = []
@@ -236,13 +218,8 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
     sentence.append(second_word)
     
     current_bigram = (first_word, second_word)
-    punctuation = {'.', ',', '!', '?', ':', ';', '...'}
-    bad_end_tokens = {
-        'the','a','an','and','or','but','of','to','in','on','for','with','at','by','from','as','that','this','these','those',
-        'is','are','was','were','be','am','been','being','do','does','did','so','not','if','than','then',
-        'i','you','he','she','it','we','they','me','him','her','us','them','my','your','his','its','our','their'
-    }
-    allowed_end_tokens = {w for w in end_words.keys() if w not in bad_end_tokens}
+    end_punctuation = {'.', ',', '!', '?', ':', ';', '...'}
+    allowed_end_tokens = {w for w in end_words.keys() if w not in BAD_END_TOKENS}
     
     for _ in range(max_length - 2):  # -2 perché abbiamo già aggiunto 2 parole
         # Trova tutte le possibili parole successive basate sul trigramma
@@ -253,7 +230,7 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
         for (w1, w2, w3), prob in trigram_probs.items():
             if (w1, w2) == current_bigram:
                 # Evita punteggiatura consecutiva
-                if not (current_bigram[1] in punctuation and w3 in punctuation):
+                if not (current_bigram[1] in end_punctuation and w3 in end_punctuation):
                     next_words.append(w3)
                     next_weights.append(prob)
         
@@ -261,7 +238,7 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
         if not next_words:
             for (w1, w2), prob in bigram_probs.items():
                 if w1 == current_bigram[1]:
-                    if not (current_bigram[1] in punctuation and w2 in punctuation):
+                    if not (current_bigram[1] in end_punctuation and w2 in end_punctuation):
                         next_words.append(w2)
                         next_weights.append(prob * 0.7)  # Penalizza leggermente il backoff
         
@@ -283,18 +260,13 @@ def generate_sentence_trigram(trigram_probs, bigram_probs, start_words, end_word
         if next_word == '</s>' or (next_word == '.' and random.random() > 0.3):
             break
         
-        # Aggiorna il bigram corrente
         current_bigram = (current_bigram[1], next_word)
     
     return post_process_text(sentence)
 
-def plot_top_ngrams(tokens, n=2, top_k=20, include_special=False, include_punct=False, title=None, save_path=None):
+def plot_top_ngrams(tokens, n=2, top_k=20, include_special=False, title=None, save_path=None):
     
-    punct = {'.', ',', '!', '?', ';', ':', '...', '(', ')', '[', ']', '{', '}', '"', "'"}
-
     toks = tokens if include_special else [t for t in tokens if t not in {'<s>', '</s>'}]
-    if not include_punct:
-        toks = [t for t in toks if t not in punct]
 
     counts = Counter(ngrams(toks, n))
     most_common = counts.most_common(top_k)
@@ -321,7 +293,6 @@ def plot_top_ngrams(tokens, n=2, top_k=20, include_special=False, include_punct=
         plt.show()
 
 if __name__ == "__main__":
-    # Percorso relativo per portabilità
     filepath = str((Path(__file__).resolve().parent / 'moby-dick-clean.txt'))
     tokens = load_and_tokenize_mobydick(filepath)
 
@@ -335,7 +306,6 @@ if __name__ == "__main__":
     print(f"Bigrammi unici: {len(bigram_counts)}")
     print(f"Trigrammi unici: {len(trigram_counts)}")
 
-    # Grafici top n-grammi (salvati nella root del progetto)
     project_root = Path(__file__).resolve().parents[1]
     plot_top_ngrams(
         tokens,
